@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    tools:context=".LoginActivity">
+
+    <ImageView
+        android:src="@drawable/splash"
+        android:layout_width = "wrap_content"
+        android:layout_height = "wrap_content"/>
+
+    <android.support.design.widget.TextInputLayout
+        android:layout_margin="10dp"
+        android:layout_width = "match_parent"
+        android:layout_height = "wrap_content">
+        <EditText
+            android:id="@+id/user_id"
+            android:hint="ID"
+            android:text="test@test.com"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </android.support.design.widget.TextInputLayout>
+
+    <android.support.design.widget.TextInputLayout
+        android:layout_margin="10dp"
+        android:layout_width = "match_parent"
+        android:layout_height = "wrap_content">
+        <EditText
+            android:id="@+id/user_pw"
+            android:hint="Password"
+            android:text="test1234"
+            android:inputType="textPassword"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </android.support.design.widget.TextInputLayout>
+    <Button
+        android:layout_margin="10dp"
+        android:id="@+id/loginBtn"
+        android:text="Login"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+
+</LinearLayout>
