@@ -2,6 +2,8 @@
 This is a native Android (Firebase) Messenger app, with real time chat conversations.
 This app is suitable for enterprise messenger where everyone appears because there is no management function such as add / delete / find friends.
 
+![Screenshot](./Screenshot.png)
+
 ### FEATURES ###
 - 1:1 chat with Text Messages.
 - Group chat with Text Messages.
