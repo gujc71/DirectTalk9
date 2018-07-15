@@ -24,4 +24,9 @@ This app is suitable for enterprise messenger where everyone appears because the
    in android studio, you can make with Tool > Firebase menu 
   
 3. Run.
-  - If you see a message like "Please select Android SDK", modify gradle file and run sync now.
+  
+   If you see a message like "Please select Android SDK", modify gradle file and run sync now.
+
+
+4. To use push server(Google Cloud Messaging), you must put the key provided by Firebase in the request header(Authorization) in the sendGCM function in ChatActivity.java.
+
