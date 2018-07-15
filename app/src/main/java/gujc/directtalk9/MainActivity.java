@@ -1,5 +1,7 @@
 package gujc.directtalk9;
 
+import android.content.Intent;
+import android.support.design.widget.TabItem;
 import android.support.design.widget.TabLayout;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
@@ -26,6 +28,7 @@ import com.google.firebase.iid.FirebaseInstanceId;
 import java.util.HashMap;
 import java.util.Map;
 
+import gujc.directtalk9.chat.SelectUserActivity;
 import gujc.directtalk9.fragment.ChatRoomFragment;
 import gujc.directtalk9.fragment.UserFragment;
 import gujc.directtalk9.fragment.UserListFragment;
@@ -47,6 +50,8 @@ public class MainActivity extends AppCompatActivity {
      */
     private ViewPager mViewPager;
 
+    private FloatingActionButton makeRoomBtn;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -63,11 +68,40 @@ public class MainActivity extends AppCompatActivity {
         mViewPager.setAdapter(mSectionsPagerAdapter);
 
         TabLayout tabLayout = (TabLayout) findViewById(R.id.tabs);
+        tabLayout.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override
+            public void onTabSelected(TabLayout.Tab tab) {
+                if (tab.getPosition()==1) {     // char room
+                    makeRoomBtn.setVisibility(View.VISIBLE);
+                }
+            }
+
+            @Override
+            public void onTabUnselected(TabLayout.Tab tab) {
+                makeRoomBtn.setVisibility(View.INVISIBLE);
+            }
+
+            @Override
+            public void onTabReselected(TabLayout.Tab tab) {
+
+            }
+        });
 
         mViewPager.addOnPageChangeListener(new TabLayout.TabLayoutOnPageChangeListener(tabLayout));
         tabLayout.addOnTabSelectedListener(new TabLayout.ViewPagerOnTabSelectedListener(mViewPager));
 
         sendRegistrationToServer();
+
+
+        makeRoomBtn = findViewById(R.id.makeRoomBtn);
+        makeRoomBtn.setVisibility(View.INVISIBLE);
+        makeRoomBtn.setOnClickListener( new View.OnClickListener(){
+
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(v.getContext(), SelectUserActivity.class));
+            }
+        });
     }
 
     void sendRegistrationToServer() {
@@ -93,7 +127,12 @@ public class MainActivity extends AppCompatActivity {
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
+        if (id == R.id.action_logout) {
+            FirebaseAuth.getInstance().signOut();
+            Intent intent = new Intent(this, LoginActivity.class);
+            this.startActivity(intent);
+            this.finish();
+
             return true;
         }
 

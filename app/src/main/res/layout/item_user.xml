@@ -2,7 +2,8 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="58dp"
+    android:layout_height="70dp"
+    android:gravity="center_vertical"
     android:orientation="horizontal">
 
     <ImageView
@@ -11,13 +12,33 @@
         android:layout_margin="10dp"
         android:id="@+id/user_photo"/>
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="User ID"
-        android:id="@+id/user_name"
-        android:layout_marginLeft="10dp"
-        android:textSize="18dp"
-        android:layout_gravity="center_vertical"/>
+    <RelativeLayout
+        xmlns:android="http://schemas.android.com/apk/res/android"
+        android:id="@+id/RelativeLayout01"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:gravity="center_vertical"
+        android:padding="10dp">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="User ID"
+            android:id="@+id/user_name"
+            android:layout_marginLeft="10dp"
+            android:textSize="18dp"
+            android:layout_gravity="center_vertical"/>
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:maxWidth = "150dp"
+            android:text="User ID"
+            android:id="@+id/user_msg"
+            android:layout_marginRight="5dp"
+            android:textSize="14dp"
+            android:layout_alignParentRight="true"
+            android:background="@drawable/shape_rectangle"
+            android:padding="5dp"
+            android:layout_gravity="center_vertical"/>
+    </RelativeLayout>
 </LinearLayout>

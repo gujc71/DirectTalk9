@@ -6,6 +6,7 @@ public class UserModel {
     private String usernm;
     private String token;
     private String userphoto;
+    private String usermsg;
 
     public String getUserid() {
         return userid;
@@ -45,5 +46,13 @@ public class UserModel {
 
     public void setUserphoto(String userphoto) {
         this.userphoto = userphoto;
+    }
+
+    public String getUsermsg() {
+        return usermsg;
+    }
+
+    public void setUsermsg(String usermsg) {
+        this.usermsg = usermsg;
     }
 }

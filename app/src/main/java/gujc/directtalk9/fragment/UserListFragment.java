@@ -85,6 +85,7 @@ public class UserListFragment extends Fragment {
             final UserModel user = userModels.get(position);
             CustomViewHolder customViewHolder = (CustomViewHolder) holder;
             customViewHolder.user_name.setText(user.getUsernm());
+            customViewHolder.user_msg.setText(user.getUsermsg());
 
             if (user.getUserphoto()==null) {
                 Glide.with(getActivity()).load(R.drawable.user)
@@ -115,11 +116,13 @@ public class UserListFragment extends Fragment {
     private class CustomViewHolder extends RecyclerView.ViewHolder {
         public ImageView user_photo;
         public TextView user_name;
+        public TextView user_msg;
 
         public CustomViewHolder(View view) {
             super(view);
             user_photo = view.findViewById(R.id.user_photo);
             user_name = view.findViewById(R.id.user_name);
+            user_msg = view.findViewById(R.id.user_msg);
         }
     }
 }

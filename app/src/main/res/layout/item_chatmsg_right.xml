@@ -4,47 +4,82 @@
     android:id="@+id/msg_main_layout"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="5dp"
-    android:gravity="right"
-    android:orientation="horizontal">
+    android:orientation="vertical">
 
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:id="@+id/divider"
+        android:layout_width="match_parent"
+        android:layout_height="16dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <View
+            android:layout_width="100dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:background="@android:color/darker_gray"
+            android:visibility="visible">
+        </View>
+        <TextView
+            android:id="@+id/divider_date"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textAlignment="center"
+            android:text="1999-01-01"/>
+        <View
+            android:layout_width="100dp"
+            android:layout_height="1dp"
+            android:layout_weight="1"
+            android:background="@android:color/darker_gray"
+            android:visibility="visible">
+        </View>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:gravity="right"
+        android:padding="5dp"
+        android:orientation="horizontal">
 
-        <TextView
-            android:id="@+id/read_counter"
-            android:layout_gravity="right"
-
-            android:layout_margin="3dp"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:visibility="invisible"
-            android:text="0"/>
+            android:orientation="vertical">
 
-        <TextView
-            android:id="@+id/timestamp"
-            android:layout_gravity="bottom"
+            <TextView
+                android:id="@+id/read_counter"
+                android:layout_gravity="right"
+
+                android:layout_margin="3dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="invisible"
+                android:text="0"/>
+
+            <TextView
+                android:id="@+id/timestamp"
+                android:layout_gravity="bottom"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="time"/>
+        </LinearLayout>
+
+        <LinearLayout
+            android:orientation="vertical"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="time"/>
+            android:layout_height="wrap_content">
+            <TextView
+                android:id="@+id/msg_item"
+                android:background="@drawable/bubbleright"
+                android:layout_marginLeft="5dp"
+                android:layout_marginRight="3dp"
+                android:textSize="18dp"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxWidth="270dp"
+                android:text="msg"/>
+        </LinearLayout>
     </LinearLayout>
-
-    <LinearLayout
-        android:orientation="vertical"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content">
-        <TextView
-            android:id="@+id/msg_item"
-            android:background="@drawable/bubbleright"
-            android:layout_marginLeft="5dp"
-            android:layout_marginRight="3dp"
-            android:textSize="18dp"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:maxWidth="270dp"
-            android:text="msg"/>
-    </LinearLayout>
-
 </LinearLayout>

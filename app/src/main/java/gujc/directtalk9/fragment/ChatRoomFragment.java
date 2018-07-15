@@ -1,5 +1,8 @@
 package gujc.directtalk9.fragment;
 
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.support.v4.app.Fragment;
 import android.content.Intent;
 import android.os.Bundle;
@@ -27,6 +30,7 @@ import gujc.directtalk9.model.UserModel;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
@@ -46,10 +50,6 @@ public class ChatRoomFragment extends Fragment{
 
     public ChatRoomFragment() {
     }
-    public static ChatRoomFragment newInstance() {
-        ChatRoomFragment fragment = new ChatRoomFragment();
-        return fragment;
-    }
 
     @Nullable
     @Override
@@ -61,15 +61,6 @@ public class ChatRoomFragment extends Fragment{
         recyclerView.setLayoutManager(new LinearLayoutManager(inflater.getContext()));
 
         simpleDateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Seoul"));
-
-        FloatingActionButton makeRoomBtn = view.findViewById(R.id.makeRoomBtn);
-        makeRoomBtn.setOnClickListener( new View.OnClickListener(){
-
-            @Override
-            public void onClick(View v) {
-                startActivity(new Intent(v.getContext(), SelectUserActivity.class));
-            }
-        });
 
         return view;
     }
@@ -98,15 +89,25 @@ public class ChatRoomFragment extends Fragment{
         }
 
         public void getRoomInfo() {
-            FirebaseDatabase.getInstance().getReference().child("rooms").orderByChild("users/"+myUid).equalTo("i").addListenerForSingleValueEvent(new ValueEventListener(){
-
+            FirebaseDatabase.getInstance().getReference().child("rooms").orderByChild("users/"+myUid).equalTo("i").addValueEventListener(new ValueEventListener(){
                 @Override
                 public void onDataChange(DataSnapshot dataSnapshot) {
+                    Integer unreadTotal = 0;
+                    TreeMap<Long, ChatRoomModel> sortRoomList = new TreeMap<Long, ChatRoomModel>(Collections.reverseOrder());
+
                     for (DataSnapshot item : dataSnapshot.getChildren()) {
                         ChatRoomModel chatRoomModel = new ChatRoomModel();
                         chatRoomModel.setRoomID(item.getKey());
 
-                        roomList.add( chatRoomModel );
+                        long sortKey = 0;
+                        ChatModel.Message message = item.child("lastmessage").getValue(ChatModel.Message.class);
+                        if (message!=null) {
+                            chatRoomModel.setLastMsg(message.msg);
+                            sortKey = (long) message.timestamp;
+                            chatRoomModel.setLastDatetime(simpleDateFormat.format(new Date(sortKey)));
+                        }
+
+                        sortRoomList.put(sortKey, chatRoomModel);
 
                         Map<String, Object> map = (Map<String, Object>)item.child("users").getValue();
                         if (map.size()==2) {
@@ -126,19 +127,20 @@ public class ChatRoomFragment extends Fragment{
                             chatRoomModel.setTitle( title.substring(0, title.length() - 2) );
                         }
                         chatRoomModel.setUserCount(map.size());
-
-                        if (item.child("messages").getValue()==null) continue;
-
-                        Map<String, ChatModel.Message> cMap = new TreeMap<>(Collections.<String>reverseOrder());    // sorting
-                        cMap.putAll( (Map<String, ChatModel.Message>) item.child("messages").getValue());
-
-                        String msgID=(String) cMap.keySet().toArray()[0];
-
-                        ChatModel.Message message = item.child("messages/"+msgID).getValue(ChatModel.Message.class);
-                        chatRoomModel.setLastMsg(message.msg);
-                        chatRoomModel.setLastDatetime(simpleDateFormat.format( new Date( (long) message.timestamp) ) );
+                        Integer unreadCount = item.child("unread/"+myUid).getValue(Integer.class);
+                        if (unreadCount==null)
+                             chatRoomModel.setUnreadCount(0);
+                        else {
+                            chatRoomModel.setUnreadCount(unreadCount);
+                            unreadTotal += unreadCount;
+                        }
+                    }
+                    roomList.clear();
+                    for(Map.Entry<Long,ChatRoomModel> entry : sortRoomList.entrySet()) {
+                        roomList.add(entry.getValue());
                     }
                     notifyDataSetChanged();
+                    setBadge(getContext(), unreadTotal);
                 }
 
                 @Override
@@ -164,6 +166,7 @@ public class ChatRoomFragment extends Fragment{
             roomViewHolder.room_title.setText(chatRoomModel.getTitle());
             roomViewHolder.last_msg.setText(chatRoomModel.getLastMsg());
             roomViewHolder.last_time.setText(chatRoomModel.getLastDatetime());
+
             if (chatRoomModel.getPhoto()==null) {
                 Glide.with(getActivity()).load(R.drawable.user)
                         .apply(requestOptions)
@@ -175,8 +178,15 @@ public class ChatRoomFragment extends Fragment{
             }
             if (chatRoomModel.getUserCount() > 2) {
                 roomViewHolder.room_count.setText(chatRoomModel.getUserCount().toString());
+                roomViewHolder.room_count.setVisibility(View.VISIBLE);
             } else {
                 roomViewHolder.room_count.setVisibility(View.INVISIBLE);
+            }
+            if (chatRoomModel.getUnreadCount() > 0) {
+                roomViewHolder.unread_count.setText(chatRoomModel.getUnreadCount().toString());
+                roomViewHolder.unread_count.setVisibility(View.VISIBLE);
+            } else {
+                roomViewHolder.unread_count.setVisibility(View.INVISIBLE);
             }
 
             roomViewHolder.itemView.setOnClickListener(new View.OnClickListener(){
@@ -200,6 +210,7 @@ public class ChatRoomFragment extends Fragment{
             public TextView last_msg;
             public TextView last_time;
             public TextView room_count;
+            public TextView unread_count;
 
             public RoomViewHolder(View view) {
                 super(view);
@@ -208,7 +219,38 @@ public class ChatRoomFragment extends Fragment{
                 last_msg = view.findViewById(R.id.last_msg);
                 last_time = view.findViewById(R.id.last_time);
                 room_count = view.findViewById(R.id.room_count);
+                unread_count = view.findViewById(R.id.unread_count);
             }
         }
+    }
+
+    public static void setBadge(Context context, int count) {
+        String launcherClassName = getLauncherClassName(context);
+        if (launcherClassName == null) {
+            return;
+        }
+        Intent intent = new Intent("android.intent.action.BADGE_COUNT_UPDATE");
+        intent.putExtra("badge_count", count);
+        intent.putExtra("badge_count_package_name", context.getPackageName());
+        intent.putExtra("badge_count_class_name", launcherClassName);
+        context.sendBroadcast(intent);
+    }
+
+    public static String getLauncherClassName(Context context) {
+
+        PackageManager pm = context.getPackageManager();
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+
+        List<ResolveInfo> resolveInfos = pm.queryIntentActivities(intent, 0);
+        for (ResolveInfo resolveInfo : resolveInfos) {
+            String pkgName = resolveInfo.activityInfo.applicationInfo.packageName;
+            if (pkgName.equalsIgnoreCase(context.getPackageName())) {
+                String className = resolveInfo.activityInfo.name;
+                return className;
+            }
+        }
+        return null;
     }
 }
