@@ -40,4 +40,14 @@ public class Util9 {
         return ft.format(new Date()) + (int) (Math.random()*10);
     }
 
+    public static String size2String(Long filesize) {
+        Integer unit = 1024;
+        if (filesize < unit){
+            return String.format("%d bytes", filesize);
+        }
+        int exp = (int) (Math.log(filesize) / Math.log(unit));
+
+        return String.format("%.0f %s", filesize / Math.pow(unit, exp), "KMGTPE".charAt(exp-1));
+    }
+
 }
