@@ -1,11 +1,14 @@
 package gujc.directtalk9.chat;
 
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
-import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,9 +23,13 @@ import com.bumptech.glide.load.resource.bitmap.CenterCrop;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.bumptech.glide.request.RequestOptions;
 import gujc.directtalk9.R;
+import gujc.directtalk9.common.Util9;
 import gujc.directtalk9.model.ChatModel;
 import gujc.directtalk9.model.NotificationModel;
 import gujc.directtalk9.model.UserModel;
+
+import com.bumptech.glide.request.target.SimpleTarget;
+import com.bumptech.glide.request.transition.Transition;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
@@ -32,8 +39,12 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ServerValue;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
+import com.google.firebase.storage.UploadTask;
 import com.google.gson.Gson;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -52,6 +63,7 @@ import okhttp3.RequestBody;
 import okhttp3.Response;
 
 public class ChatActivity extends AppCompatActivity {
+    private static final int PICK_FROM_ALBUM = 1;
 
     private Button sendBtn;
     private EditText msg_input;
@@ -85,6 +97,8 @@ public class ChatActivity extends AppCompatActivity {
         msg_input = findViewById(R.id.msg_input);
         sendBtn = findViewById(R.id.sendBtn);
         sendBtn.setOnClickListener(sendBtnClickListener);
+
+        findViewById(R.id.fileBtn).setOnClickListener(fileBtnClickListener);
 
         /*
          two user: roomid or uid talking
@@ -152,59 +166,68 @@ public class ChatActivity extends AppCompatActivity {
 
     Button.OnClickListener sendBtnClickListener = new View.OnClickListener() {
         public void onClick(View view) {
-            sendBtn.setEnabled(false);
+            String msg = msg_input.getText().toString();
+            sendMessage(msg, "0");
+            msg_input.setText("");
+        }
+    };
 
-            if (roomID==null) {             // two user
-                ChatModel chatModel = new ChatModel();
-                for( String key : userList.keySet() ){
-                    chatModel.users.put(key, "i");
-                }
-                roomID = db.child("rooms").push().getKey();
-                db.child("rooms/"+roomID).setValue(chatModel);
-                recyclerView.setLayoutManager(new LinearLayoutManager(ChatActivity.this));
-                recyclerView.setAdapter(new RecyclerViewAdapter());
+    private void sendMessage(String msg, String msgtype) {
+        sendBtn.setEnabled(false);
+
+        if (roomID==null) {             // two user
+            ChatModel chatModel = new ChatModel();
+            for( String key : userList.keySet() ){
+                chatModel.users.put(key, "i");
             }
-            ChatModel.Message messages = new ChatModel.Message();
-            messages.uid = myUid;
-            messages.msg = msg_input.getText().toString();
-            messages.timestamp = ServerValue.TIMESTAMP;
-            db.child("rooms").child(roomID).child("lastmessage").setValue(messages);
-            messages.readUsers.put(myUid, true);
-            db.child("rooms").child(roomID).child("messages").push().setValue(messages).addOnCompleteListener(new OnCompleteListener<Void>() {
-                @Override
-                public void onComplete(@NonNull Task<Void> task) {
-                    //sendGCM();
-                    sendBtn.setEnabled(true);
-                    msg_input.setText("");
-                }
-            });
-            db.child("rooms").child(roomID).child("users").addListenerForSingleValueEvent(new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    for (final DataSnapshot item : dataSnapshot.getChildren()) {
-                        final String uid = item.getKey();
-                        if (!myUid.equals(item.getKey())) {
-                            db.child("rooms").child(roomID).child("unread").child(item.getKey()).addListenerForSingleValueEvent(new ValueEventListener() {
-                                @Override
-                                public void onDataChange(DataSnapshot dataSnapshot) {
-                                    Integer cnt = dataSnapshot.getValue(Integer.class);
-                                    if (cnt==null) cnt=0;
-                                    db.child("rooms").child(roomID).child("unread").child(uid).setValue(cnt+1);
-                                }
+            roomID = db.child("rooms").push().getKey();
+            db.child("rooms/"+roomID).setValue(chatModel);
+            recyclerView.setLayoutManager(new LinearLayoutManager(ChatActivity.this));
+            recyclerView.setAdapter(new RecyclerViewAdapter());
+        }
 
-                                @Override
-                                public void onCancelled(DatabaseError databaseError) {
+        ChatModel.Message messages = new ChatModel.Message();
+        messages.uid = myUid;
+        messages.msg = msg;
+        messages.msgtype=msgtype;
+        messages.timestamp = ServerValue.TIMESTAMP;
+        db.child("rooms").child(roomID).child("lastmessage").setValue(messages);    // save last message
+        // save message
+        messages.readUsers.put(myUid, true);
+        db.child("rooms").child(roomID).child("messages").push().setValue(messages).addOnCompleteListener(new OnCompleteListener<Void>() {
+            @Override
+            public void onComplete(@NonNull Task<Void> task) {
+                //sendGCM();
+                sendBtn.setEnabled(true);
+            }
+        });
+        // inc unread message count
+        db.child("rooms").child(roomID).child("users").addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                for (final DataSnapshot item : dataSnapshot.getChildren()) {
+                    final String uid = item.getKey();
+                    if (!myUid.equals(item.getKey())) {
+                        db.child("rooms").child(roomID).child("unread").child(item.getKey()).addListenerForSingleValueEvent(new ValueEventListener() {
+                            @Override
+                            public void onDataChange(DataSnapshot dataSnapshot) {
+                                Integer cnt = dataSnapshot.getValue(Integer.class);
+                                if (cnt==null) cnt=0;
+                                db.child("rooms").child(roomID).child("unread").child(uid).setValue(cnt+1);
+                            }
 
-                                }
-                            });
-                        }
+                            @Override
+                            public void onCancelled(DatabaseError databaseError) {
+
+                            }
+                        });
                     }
                 }
+            }
 
-                @Override
-                public void onCancelled(DatabaseError databaseError) { }
-            });
-        }
+            @Override
+            public void onCancelled(DatabaseError databaseError) { }
+        });
     };
 
     void sendGCM(){
@@ -236,16 +259,61 @@ public class ChatActivity extends AppCompatActivity {
          }
     }
 
+    Button.OnClickListener fileBtnClickListener = new View.OnClickListener() {
+        public void onClick(final View view) {
+            Intent intent = new Intent(Intent.ACTION_PICK);
+            intent.setType(MediaStore.Images.Media.CONTENT_TYPE);
+            startActivityForResult(intent, PICK_FROM_ALBUM);
+        }
+    };
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode !=PICK_FROM_ALBUM || resultCode!= this.RESULT_OK) { return;}
+        final Uri userPhotoUri = data.getData();
+        final String filename = Util9.getUniqueValue();
+        // upload
+        FirebaseStorage.getInstance().getReference().child("files/"+filename).putFile(userPhotoUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
+            @Override
+            public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
+                sendMessage(filename, "1");
+                //sendMessage(task.getResult().getDownloadUrl().toString(), "1");
+            }
+        });
+        // small image
+        Glide.with(getApplicationContext())
+                .asBitmap()
+                .load(userPhotoUri)
+                .apply(new RequestOptions().override(150, 150))
+                .into(new SimpleTarget<Bitmap>() {
+                    @Override
+                    public void onResourceReady(Bitmap bitmap, Transition<? super Bitmap> transition) {
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+                        byte[] data = baos.toByteArray();
+                        FirebaseStorage.getInstance().getReference().child("filesmall/"+filename).putBytes(data);/*.addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
+                            @Override
+                            public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
+                                sendMessage(task.getResult().getDownloadUrl().toString(), "1");
+                            }
+                        });*/
+
+                    }
+                });
+    }
     // =======================================================================================
 
     class RecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
+        final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
+
         List<ChatModel.Message> messageList;
         String beforeDay = null;
         MessageViewHolder beforeViewHolder;
-        final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
+        StorageReference storageReference;
 
         public RecyclerViewAdapter() {
             messageList = new ArrayList<>();
+            storageReference  = FirebaseStorage.getInstance().getReference();
 
             databaseReference = db.child("rooms").child(roomID).child("messages");
             valueEventListener = databaseReference.addValueEventListener(new ValueEventListener(){
@@ -262,6 +330,7 @@ public class ChatActivity extends AppCompatActivity {
                             message.readUsers.put(myUid, true);
                             readUsers.put(item.getKey(), message);
                         }
+                        if (message.msgtype==null) message.msgtype="0"; // temp. this line will be deleted .
                         messageList.add(message);
                     }
 
@@ -286,10 +355,19 @@ public class ChatActivity extends AppCompatActivity {
 
         @Override
         public int getItemViewType(int position) {
-            if (myUid.equals(messageList.get(position).uid) ) {
-                return R.layout.item_chatmsg_right;
+            ChatModel.Message message = messageList.get(position);
+            if (myUid.equals(message.uid) ) {
+                if ("0".equals(message.msgtype) ) {
+                    return R.layout.item_chatmsg_right;
+                } else {
+                    return R.layout.item_chatimage_right;
+                }
             } else {
-                return R.layout.item_chatmsg_left;
+                if ("0".equals(message.msgtype) ) {
+                    return R.layout.item_chatmsg_left;
+                } else {
+                    return R.layout.item_chatimage_left;
+                }
             }
         }
         @NonNull
@@ -310,7 +388,15 @@ public class ChatActivity extends AppCompatActivity {
             String day = dateFormatDay.format( new Date( (long) message.timestamp) );
             String timestamp = dateFormatHour.format( new Date( (long) message.timestamp) );
             messageViewHolder.timestamp.setText(timestamp);
-            messageViewHolder.msg_item.setText(message.msg);
+            if ("0".equals(message.msgtype)) {
+                messageViewHolder.msg_item.setText(message.msg);
+            } else {
+                StorageReference storageRef = FirebaseStorage.getInstance().getReference("filesmall/"+message.msg);
+                Glide.with(getApplicationContext())
+                        .load(storageRef)
+                        .apply(new RequestOptions().override(1200, 1200))
+                        .into(messageViewHolder.img_item);
+            }
 
             if (! myUid.equals(message.uid)) {
                 UserModel userModel = userList.get(message.uid);
@@ -321,7 +407,8 @@ public class ChatActivity extends AppCompatActivity {
                             .apply(requestOptions)
                             .into(messageViewHolder.user_photo);
                 } else{
-                    Glide.with(getApplicationContext()).load(userModel.getUserphoto())
+                    Glide.with(getApplicationContext())
+                            .load(storageReference.child("userPhoto/"+userModel.getUserphoto()))
                             .apply(requestOptions)
                             .into(messageViewHolder.user_photo);
                 }
@@ -334,7 +421,7 @@ public class ChatActivity extends AppCompatActivity {
                 messageViewHolder.divider_date.setText(day);
                 messageViewHolder.divider.setVisibility(View.VISIBLE);
                 messageViewHolder.divider.getLayoutParams().height = 60;
-            } else
+            };
             if (!day.equals(beforeDay) && beforeDay!=null) {
                 beforeViewHolder.divider_date.setText(beforeDay);
                 beforeViewHolder.divider.setVisibility(View.VISIBLE);
@@ -360,8 +447,9 @@ public class ChatActivity extends AppCompatActivity {
         }
 
         private class MessageViewHolder extends RecyclerView.ViewHolder {
-            public TextView msg_item;
             public ImageView user_photo;
+            public TextView msg_item;
+            public ImageView img_item;
             public TextView msg_name;
             public TextView timestamp;
             public TextView read_counter;
@@ -370,8 +458,9 @@ public class ChatActivity extends AppCompatActivity {
 
             public MessageViewHolder(View view) {
                 super(view);
-                msg_item = view.findViewById(R.id.msg_item);
                 user_photo = view.findViewById(R.id.user_photo);
+                msg_item = view.findViewById(R.id.msg_item);
+                img_item = view.findViewById(R.id.img_item);
                 timestamp = view.findViewById(R.id.timestamp);
                 msg_name = view.findViewById(R.id.msg_name);
                 read_counter = view.findViewById(R.id.read_counter);

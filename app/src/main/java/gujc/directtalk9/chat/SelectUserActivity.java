@@ -20,7 +20,7 @@ import com.bumptech.glide.load.resource.bitmap.CenterCrop;
 import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.bumptech.glide.request.RequestOptions;
 import gujc.directtalk9.R;
-import gujc.directtalk9.Util9;
+import gujc.directtalk9.common.Util9;
 import gujc.directtalk9.model.ChatModel;
 import gujc.directtalk9.model.UserModel;
 import com.google.android.gms.tasks.OnSuccessListener;

@@ -33,7 +33,7 @@
         <activity android:name=".chat.SelectUserActivity" />
         <activity android:name=".UserPWActivity"></activity>
 
-        <service android:name=".MyFirebaseMessagingService">
+        <service android:name=".common.MyFirebaseMessagingService">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>

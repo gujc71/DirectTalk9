@@ -1,4 +1,4 @@
-package gujc.directtalk9;
+package gujc.directtalk9.common;
 
 import android.app.Activity;
 import android.content.Context;
@@ -6,6 +6,9 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.Toast;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class Util9 {
     private static final Util9 ourInstance = new Util9();
@@ -31,4 +34,10 @@ public class Util9 {
         }
         imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
     }
+
+    public static String getUniqueValue() {
+        SimpleDateFormat ft = new SimpleDateFormat("yyyyMMddhhmmssSSS");
+        return ft.format(new Date()) + (int) (Math.random()*10);
+    }
+
 }

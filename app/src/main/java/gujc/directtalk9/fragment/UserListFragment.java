@@ -25,6 +25,7 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.storage.FirebaseStorage;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -92,7 +93,8 @@ public class UserListFragment extends Fragment {
                         .apply(requestOptions)
                         .into(customViewHolder.user_photo);
             } else{
-                Glide.with(getActivity()).load(user.getUserphoto())
+                Glide.with(getActivity())
+                        .load(FirebaseStorage.getInstance().getReference("userPhoto/"+user.getUserphoto()))
                         .apply(requestOptions)
                         .into(customViewHolder.user_photo);
             }

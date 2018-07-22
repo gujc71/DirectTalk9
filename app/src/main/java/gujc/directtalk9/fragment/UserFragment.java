@@ -1,6 +1,5 @@
 package gujc.directtalk9.fragment;
 
-import android.app.Activity;
 import android.support.v4.app.Fragment;
 import android.content.Intent;
 import android.net.Uri;
@@ -12,7 +11,6 @@ import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -20,7 +18,7 @@ import android.widget.ImageView;
 import com.bumptech.glide.Glide;
 import gujc.directtalk9.R;
 import gujc.directtalk9.UserPWActivity;
-import gujc.directtalk9.Util9;
+import gujc.directtalk9.common.Util9;
 import gujc.directtalk9.model.UserModel;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
@@ -76,7 +74,7 @@ public class UserFragment extends Fragment {
                 user_msg.setText(userModel.getUsermsg());
                 if (userModel.getUserphoto()!= null && !"".equals(userModel.getUserphoto())) {
                     Glide.with(getActivity())
-                         .load(userModel.getUserphoto())
+                         .load(FirebaseStorage.getInstance().getReference("userPhoto/"+userModel.getUserphoto()))
                          .into(user_photo);
                 }
             }
@@ -121,7 +119,7 @@ public class UserFragment extends Fragment {
                 FirebaseStorage.getInstance().getReference().child("userPhoto").child(uid).putFile(userPhotoUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
                     @Override
                     public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
-                        userModel.setUserphoto( task.getResult().getDownloadUrl().toString() );
+                        userModel.setUserphoto( uid );
                         FirebaseDatabase.getInstance().getReference().child("users").child(uid).setValue(userModel).addOnCompleteListener(new OnCompleteListener<Void>() {
                             @Override
                             public void onComplete(@NonNull Task<Void> task) {

@@ -10,6 +10,7 @@ public class ChatModel {
     public static class Message {
         public String uid;
         public String msg;
+        public String msgtype;          // 0: msg, 1: image, 2: file
         public Object timestamp;
         public Map<String, Object> readUsers = new HashMap<>();
     }
