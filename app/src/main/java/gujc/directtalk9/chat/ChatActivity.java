@@ -1,14 +1,19 @@
 package gujc.directtalk9.chat;
 
+import android.content.ContentResolver;
+import android.content.Context;
 import android.content.Intent;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.provider.OpenableColumns;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -45,6 +50,7 @@ import com.google.firebase.storage.UploadTask;
 import com.google.gson.Gson;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -64,6 +70,7 @@ import okhttp3.Response;
 
 public class ChatActivity extends AppCompatActivity {
     private static final int PICK_FROM_ALBUM = 1;
+    private static final int PICK_FROM_FILE = 2;
 
     private Button sendBtn;
     private EditText msg_input;
@@ -78,6 +85,7 @@ public class ChatActivity extends AppCompatActivity {
     private DatabaseReference databaseReference;
     private ValueEventListener valueEventListener;
     private DatabaseReference db=null;
+    StorageReference storageReference;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,6 +93,7 @@ public class ChatActivity extends AppCompatActivity {
         setContentView(R.layout.activity_chat);
 
         db = FirebaseDatabase.getInstance().getReference();
+        storageReference  = FirebaseStorage.getInstance().getReference();
 
         dateFormatDay.setTimeZone(TimeZone.getTimeZone("Asia/Seoul"));
         dateFormatHour.setTimeZone(TimeZone.getTimeZone("Asia/Seoul"));
@@ -98,6 +107,7 @@ public class ChatActivity extends AppCompatActivity {
         sendBtn = findViewById(R.id.sendBtn);
         sendBtn.setOnClickListener(sendBtnClickListener);
 
+        findViewById(R.id.imageBtn).setOnClickListener(imageBtnClickListener);
         findViewById(R.id.fileBtn).setOnClickListener(fileBtnClickListener);
 
         /*
@@ -259,31 +269,54 @@ public class ChatActivity extends AppCompatActivity {
          }
     }
 
-    Button.OnClickListener fileBtnClickListener = new View.OnClickListener() {
+    Button.OnClickListener imageBtnClickListener = new View.OnClickListener() {
         public void onClick(final View view) {
             Intent intent = new Intent(Intent.ACTION_PICK);
             intent.setType(MediaStore.Images.Media.CONTENT_TYPE);
             startActivityForResult(intent, PICK_FROM_ALBUM);
         }
     };
+    Button.OnClickListener fileBtnClickListener = new View.OnClickListener() {
+        public void onClick(final View view) {
+            Intent intent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            intent.setType("*/*");
+            intent.setAction(Intent.ACTION_GET_CONTENT);
+            startActivityForResult(Intent.createChooser(intent, "Select File"), PICK_FROM_FILE);
+        }
+    };
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode !=PICK_FROM_ALBUM || resultCode!= this.RESULT_OK) { return;}
-        final Uri userPhotoUri = data.getData();
+        if (resultCode!= this.RESULT_OK) { return;}
+        Uri fileUri = data.getData();
         final String filename = Util9.getUniqueValue();
-        // upload
-        FirebaseStorage.getInstance().getReference().child("files/"+filename).putFile(userPhotoUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
+
+        if (requestCode ==PICK_FROM_FILE) {
+            //File file= new File(fileUri.getPath());
+            final ChatModel.FileInfo fileinfo  = getFileDetailFromUri(getApplicationContext(), fileUri);//file.getName();
+
+            storageReference.child("files/"+filename).putFile(fileUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
+                @Override
+                public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
+                    sendMessage(filename, "2");
+                    db.child("rooms").child(roomID).child("files").child(filename).setValue(fileinfo);    // save file information
+                }
+            });
+            return;
+        }
+        if (requestCode ==PICK_FROM_ALBUM) { return;}
+
+        // upload image
+        storageReference.child("files/"+filename).putFile(fileUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
             @Override
             public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
                 sendMessage(filename, "1");
-                //sendMessage(task.getResult().getDownloadUrl().toString(), "1");
             }
         });
         // small image
         Glide.with(getApplicationContext())
                 .asBitmap()
-                .load(userPhotoUri)
+                .load(fileUri)
                 .apply(new RequestOptions().override(150, 150))
                 .into(new SimpleTarget<Bitmap>() {
                     @Override
@@ -291,16 +324,37 @@ public class ChatActivity extends AppCompatActivity {
                         ByteArrayOutputStream baos = new ByteArrayOutputStream();
                         bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
                         byte[] data = baos.toByteArray();
-                        FirebaseStorage.getInstance().getReference().child("filesmall/"+filename).putBytes(data);/*.addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
-                            @Override
-                            public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
-                                sendMessage(task.getResult().getDownloadUrl().toString(), "1");
-                            }
-                        });*/
-
+                        storageReference.child("filesmall/"+filename).putBytes(data);
                     }
                 });
     }
+
+    public static ChatModel.FileInfo getFileDetailFromUri(final Context context, final Uri uri) {
+        ChatModel.FileInfo fileDetail = null;
+        if (uri != null) {
+            fileDetail = new ChatModel.FileInfo();
+            // File Scheme.
+            if (ContentResolver.SCHEME_FILE.equals(uri.getScheme())) {
+                File file = new File(uri.getPath());
+                fileDetail.filename = file.getName();
+                fileDetail.filesize = Util9.size2String(file.length());
+            }
+            // Content Scheme.
+            else if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
+                Cursor returnCursor =
+                        context.getContentResolver().query(uri, null, null, null, null);
+                if (returnCursor != null && returnCursor.moveToFirst()) {
+                    int nameIndex = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                    int sizeIndex = returnCursor.getColumnIndex(OpenableColumns.SIZE);
+                    fileDetail.filename = returnCursor.getString(nameIndex);
+                    fileDetail.filesize = Util9.size2String(returnCursor.getLong(sizeIndex));
+                    returnCursor.close();
+                }
+            }
+        }
+        return fileDetail;
+    }
+
     // =======================================================================================
 
     class RecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
@@ -309,11 +363,9 @@ public class ChatActivity extends AppCompatActivity {
         List<ChatModel.Message> messageList;
         String beforeDay = null;
         MessageViewHolder beforeViewHolder;
-        StorageReference storageReference;
 
         public RecyclerViewAdapter() {
             messageList = new ArrayList<>();
-            storageReference  = FirebaseStorage.getInstance().getReference();
 
             databaseReference = db.child("rooms").child(roomID).child("messages");
             valueEventListener = databaseReference.addValueEventListener(new ValueEventListener(){
@@ -325,7 +377,7 @@ public class ChatActivity extends AppCompatActivity {
 
                     Map<String, Object> readUsers = new HashMap<>();
                     for (DataSnapshot item: dataSnapshot.getChildren()) {
-                        ChatModel.Message message = item.getValue(ChatModel.Message.class);
+                        final ChatModel.Message message = item.getValue(ChatModel.Message.class);
                         if (!message.readUsers.containsKey(myUid)) {
                             message.readUsers.put(myUid, true);
                             readUsers.put(item.getKey(), message);
@@ -357,16 +409,16 @@ public class ChatActivity extends AppCompatActivity {
         public int getItemViewType(int position) {
             ChatModel.Message message = messageList.get(position);
             if (myUid.equals(message.uid) ) {
-                if ("0".equals(message.msgtype) ) {
-                    return R.layout.item_chatmsg_right;
-                } else {
-                    return R.layout.item_chatimage_right;
+                switch(message.msgtype){
+                    case "1": return R.layout.item_chatimage_right;
+                    case "2": return R.layout.item_chatfile_right;
+                    default:  return R.layout.item_chatmsg_right;
                 }
             } else {
-                if ("0".equals(message.msgtype) ) {
-                    return R.layout.item_chatmsg_left;
-                } else {
-                    return R.layout.item_chatimage_left;
+                switch(message.msgtype){
+                    case "1": return R.layout.item_chatimage_left;
+                    case "2": return R.layout.item_chatfile_left;
+                    default:  return R.layout.item_chatmsg_left;
                 }
             }
         }
@@ -380,8 +432,8 @@ public class ChatActivity extends AppCompatActivity {
 
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
-            MessageViewHolder messageViewHolder = (MessageViewHolder) holder;
-            ChatModel.Message message = messageList.get(position);
+            final MessageViewHolder messageViewHolder = (MessageViewHolder) holder;
+            final ChatModel.Message message = messageList.get(position);
 
             setReadCounter(position, messageViewHolder.read_counter);
 
@@ -390,11 +442,23 @@ public class ChatActivity extends AppCompatActivity {
             messageViewHolder.timestamp.setText(timestamp);
             if ("0".equals(message.msgtype)) {
                 messageViewHolder.msg_item.setText(message.msg);
-            } else {
-                StorageReference storageRef = FirebaseStorage.getInstance().getReference("filesmall/"+message.msg);
+            } else
+            if ("2".equals(message.msgtype)) {      // file
+                db.child("rooms").child(roomID).child("files").child(message.msg).addListenerForSingleValueEvent(new ValueEventListener() {
+                    @Override
+                    public void onDataChange(DataSnapshot dataSnapshot) {
+                        ChatModel.FileInfo fileInfo = dataSnapshot.getValue(ChatModel.FileInfo.class);
+                        messageViewHolder.msg_item.setText(fileInfo.filename + "\n" + fileInfo.filesize);
+                    }
+
+                    @Override
+                    public void onCancelled(DatabaseError databaseError) {
+                    }
+                });
+            } else {                                // image
                 Glide.with(getApplicationContext())
-                        .load(storageRef)
-                        .apply(new RequestOptions().override(1200, 1200))
+                        .load(storageReference.child("filesmall/"+message.msg))
+                        .apply(new RequestOptions().override(1000, 1000))
                         .into(messageViewHolder.img_item);
             }
 

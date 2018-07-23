@@ -33,6 +33,8 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -71,8 +73,10 @@ public class ChatRoomFragment extends Fragment{
         private Map<String, UserModel> userList = new HashMap<>();
         final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
         private String myUid;
+        private StorageReference storageReference;
 
         public ChatRecyclerViewAdapter() {
+            storageReference  = FirebaseStorage.getInstance().getReference();
             myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
             FirebaseDatabase.getInstance().getReference().child("users").addListenerForSingleValueEvent(new ValueEventListener(){
@@ -172,7 +176,7 @@ public class ChatRoomFragment extends Fragment{
                         .apply(requestOptions)
                         .into(roomViewHolder.room_image);
             } else{
-                Glide.with(getActivity()).load(chatRoomModel.getPhoto())
+                Glide.with(getActivity()).load(storageReference.child("userPhoto/"+chatRoomModel.getPhoto()))
                         .apply(requestOptions)
                         .into(roomViewHolder.room_image);
             }

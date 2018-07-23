@@ -14,4 +14,9 @@ public class ChatModel {
         public Object timestamp;
         public Map<String, Object> readUsers = new HashMap<>();
     }
+
+    public static class FileInfo {
+        public String filename;
+        public String filesize;
+    }
 }

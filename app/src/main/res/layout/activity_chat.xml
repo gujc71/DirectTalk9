@@ -15,16 +15,25 @@
         android:layout_marginBottom="47dp" />
 
     <Button
-        android:id="@+id/fileBtn"
+        android:id="@+id/imageBtn"
         android:layout_width="40dp"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_alignParentLeft="true"
         android:background="@android:drawable/ic_menu_gallery" />
 
+    <Button
+        android:id="@+id/fileBtn"
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
+        android:layout_marginLeft="40dp"
+        android:background="@android:drawable/ic_menu_save" />
+
     <EditText
         android:id="@+id/msg_input"
-        android:layout_marginLeft="40dp"
+        android:layout_marginLeft="80dp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_toLeftOf="@id/sendBtn"

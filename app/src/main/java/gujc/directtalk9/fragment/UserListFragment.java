@@ -26,6 +26,7 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,11 +50,14 @@ public class UserListFragment extends Fragment {
     class UserFragmentRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
 
         private List<UserModel> userModels;
+        private StorageReference storageReference;
         final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
 
         public UserFragmentRecyclerViewAdapter() {
+            storageReference  = FirebaseStorage.getInstance().getReference();
             userModels = new ArrayList<>();
             final String myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+
             FirebaseDatabase.getInstance().getReference().child("users").addValueEventListener(new ValueEventListener() {
                 @Override
                 public void onDataChange(DataSnapshot dataSnapshot) {
@@ -94,7 +98,7 @@ public class UserListFragment extends Fragment {
                         .into(customViewHolder.user_photo);
             } else{
                 Glide.with(getActivity())
-                        .load(FirebaseStorage.getInstance().getReference("userPhoto/"+user.getUserphoto()))
+                        .load(storageReference.child("userPhoto/"+user.getUserphoto()))
                         .apply(requestOptions)
                         .into(customViewHolder.user_photo);
             }
