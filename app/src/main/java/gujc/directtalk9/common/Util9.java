@@ -2,6 +2,7 @@ package gujc.directtalk9.common;
 
 import android.app.Activity;
 import android.content.Context;
+import android.os.Environment;
 import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
@@ -47,7 +48,17 @@ public class Util9 {
         }
         int exp = (int) (Math.log(filesize) / Math.log(unit));
 
-        return String.format("%.0f %s", filesize / Math.pow(unit, exp), "KMGTPE".charAt(exp-1));
+        return String.format("%.0f %sbytes", filesize / Math.pow(unit, exp), "KMGTPE".charAt(exp-1));
     }
 
+    public static String getRootPath() {
+        String sdPath;
+        String ext1 = Environment.getExternalStorageState();
+        if (ext1.equals(Environment.MEDIA_MOUNTED)) {
+            sdPath = Environment.getExternalStorageDirectory().getAbsolutePath();
+        } else {
+            sdPath = Environment.MEDIA_UNMOUNTED;
+        }
+        return sdPath;
+    }
 }

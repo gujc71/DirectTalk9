@@ -20,6 +20,7 @@
         <EditText
             android:id="@+id/user_id"
             android:hint="ID"
+            android:inputType="text"
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
     </android.support.design.widget.TextInputLayout>

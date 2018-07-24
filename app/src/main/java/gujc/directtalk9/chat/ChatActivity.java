@@ -1,15 +1,22 @@
 package gujc.directtalk9.chat;
 
+import android.Manifest;
+import android.app.ProgressDialog;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
 import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
+import android.support.v4.content.FileProvider;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -17,6 +24,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.MimeTypeMap;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
@@ -36,6 +44,8 @@ import gujc.directtalk9.model.UserModel;
 import com.bumptech.glide.request.target.SimpleTarget;
 import com.bumptech.glide.request.transition.Transition;
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
@@ -44,7 +54,9 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ServerValue;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.storage.FileDownloadTask;
 import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.OnProgressListener;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
 import com.google.gson.Gson;
@@ -85,7 +97,9 @@ public class ChatActivity extends AppCompatActivity {
     private DatabaseReference databaseReference;
     private ValueEventListener valueEventListener;
     private DatabaseReference db=null;
-    StorageReference storageReference;
+    private StorageReference storageReference;
+
+    private ProgressDialog progressDialog = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -269,6 +283,7 @@ public class ChatActivity extends AppCompatActivity {
          }
     }
 
+    // upload image / file
     Button.OnClickListener imageBtnClickListener = new View.OnClickListener() {
         public void onClick(final View view) {
             Intent intent = new Intent(Intent.ACTION_PICK);
@@ -278,7 +293,7 @@ public class ChatActivity extends AppCompatActivity {
     };
     Button.OnClickListener fileBtnClickListener = new View.OnClickListener() {
         public void onClick(final View view) {
-            Intent intent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
             intent.setType("*/*");
             intent.setAction(Intent.ACTION_GET_CONTENT);
             startActivityForResult(Intent.createChooser(intent, "Select File"), PICK_FROM_FILE);
@@ -292,7 +307,8 @@ public class ChatActivity extends AppCompatActivity {
         final String filename = Util9.getUniqueValue();
 
         if (requestCode ==PICK_FROM_FILE) {
-            //File file= new File(fileUri.getPath());
+            //File file= new File(fileUri.getRootPath());
+            showProgressDialog("Uploading selected File.");
             final ChatModel.FileInfo fileinfo  = getFileDetailFromUri(getApplicationContext(), fileUri);//file.getName();
 
             storageReference.child("files/"+filename).putFile(fileUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
@@ -300,17 +316,20 @@ public class ChatActivity extends AppCompatActivity {
                 public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
                     sendMessage(filename, "2");
                     db.child("rooms").child(roomID).child("files").child(filename).setValue(fileinfo);    // save file information
+                    hideProgressDialog();
                 }
             });
             return;
         }
-        if (requestCode ==PICK_FROM_ALBUM) { return;}
+        if (requestCode != PICK_FROM_ALBUM) { return;}
 
+        showProgressDialog("Uploading selected Image.");
         // upload image
         storageReference.child("files/"+filename).putFile(fileUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
             @Override
             public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
                 sendMessage(filename, "1");
+                hideProgressDialog();
             }
         });
         // small image
@@ -355,6 +374,25 @@ public class ChatActivity extends AppCompatActivity {
         return fileDetail;
     }
 
+    public void showProgressDialog(String title ) {
+        if (progressDialog==null) {
+            progressDialog = new ProgressDialog(this);
+        }
+        //progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        progressDialog.setIndeterminate(true);
+        progressDialog.setTitle(title);
+        progressDialog.setMessage("Please wait..");
+        progressDialog.setCancelable(false);
+        //progressDialog.setMax(100);
+        //progressDialog.setProgress(0);
+        progressDialog.show();
+    }
+    public void setProgressDialog(int value) {
+        progressDialog.setProgress(value);
+    }
+    public void hideProgressDialog() {
+        progressDialog.dismiss();
+    }
     // =======================================================================================
 
     class RecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
@@ -363,8 +401,17 @@ public class ChatActivity extends AppCompatActivity {
         List<ChatModel.Message> messageList;
         String beforeDay = null;
         MessageViewHolder beforeViewHolder;
+        String rootPath = Util9.getRootPath()+"/DirectTalk9/";
 
         public RecyclerViewAdapter() {
+            File dir = new File(rootPath);
+            if (!dir.exists()) {
+                if (!isStoragePermissionGranted()) {
+                    return ;
+                }
+                dir.mkdirs();
+            }
+
             messageList = new ArrayList<>();
 
             databaseReference = db.child("rooms").child(roomID).child("messages");
@@ -449,6 +496,14 @@ public class ChatActivity extends AppCompatActivity {
                     public void onDataChange(DataSnapshot dataSnapshot) {
                         ChatModel.FileInfo fileInfo = dataSnapshot.getValue(ChatModel.FileInfo.class);
                         messageViewHolder.msg_item.setText(fileInfo.filename + "\n" + fileInfo.filesize);
+                        messageViewHolder.filename = fileInfo.filename;
+                        messageViewHolder.realname = message.msg;
+                        File file = new File(rootPath + fileInfo.filename);
+                        if(file.exists()) {
+                            messageViewHolder.button_item.setText("Open File");
+                        } else {
+                            messageViewHolder.button_item.setText("Download");
+                        }
                     }
 
                     @Override
@@ -513,12 +568,16 @@ public class ChatActivity extends AppCompatActivity {
         private class MessageViewHolder extends RecyclerView.ViewHolder {
             public ImageView user_photo;
             public TextView msg_item;
-            public ImageView img_item;
+            public ImageView img_item;          // only item_chatimage_
             public TextView msg_name;
             public TextView timestamp;
             public TextView read_counter;
             public LinearLayout divider;
             public TextView divider_date;
+            public TextView button_item;            // only item_chatfile_
+            public LinearLayout msgLine_item;       // only item_chatfile_
+            public String filename;
+            public String realname;
 
             public MessageViewHolder(View view) {
                 super(view);
@@ -530,10 +589,86 @@ public class ChatActivity extends AppCompatActivity {
                 read_counter = view.findViewById(R.id.read_counter);
                 divider = view.findViewById(R.id.divider);
                 divider_date = view.findViewById(R.id.divider_date);
+                button_item = view.findViewById(R.id.button_item);
+                msgLine_item = view.findViewById(R.id.msgLine_item);
+                if (msgLine_item!=null) {
+                    msgLine_item.setOnClickListener(downloadClickListener);
+                }
             }
+            Button.OnClickListener downloadClickListener = new View.OnClickListener() {
+                public void onClick(View view) {
+                    if ("Download".equals(button_item.getText())) {
+                        download();
+                    } else {
+                        openWith();
+                    }
+                }
+                public void download() {
+                    if (!isStoragePermissionGranted()) {
+                        return ;
+                    }
+                    showProgressDialog("Downloading File.");
+
+                    final File localFile = new File(rootPath, filename);
+
+                    storageReference.child("files/"+realname).getFile(localFile).addOnSuccessListener(new OnSuccessListener<FileDownloadTask.TaskSnapshot>() {
+                        @Override
+                        public void onSuccess(FileDownloadTask.TaskSnapshot taskSnapshot) {
+                            button_item.setText("Open File");
+                            hideProgressDialog();
+                            Log.e("DirectTalk9 ","local file created " +localFile.toString());
+                        }
+                    }).addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception exception) {
+                            Log.e("DirectTalk9 ","local file not created  " +exception.toString());
+                        }
+                    });
+                }
+
+                public void openWith() {
+                    File newFile = new File(rootPath + filename);
+                    MimeTypeMap mime = MimeTypeMap.getSingleton();
+                    String ext = newFile.getName().substring(newFile.getName().lastIndexOf(".") + 1);
+                    String type = mime.getMimeTypeFromExtension(ext);
+
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    Uri uri;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                        uri = FileProvider.getUriForFile(getApplicationContext(), getPackageName() + ".provider", newFile);
+
+                        List<ResolveInfo> resInfoList = getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+                        for (ResolveInfo resolveInfo : resInfoList) {
+                            String packageName = resolveInfo.activityInfo.packageName;
+                            grantUriPermission(packageName, uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        }
+                    }else {
+                        uri = Uri.fromFile(newFile);
+                    }
+                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                    intent.setDataAndType(uri, type);//"application/vnd.android.package-archive");
+                    startActivity(Intent.createChooser(intent, "Your title"));
+                }
+            };
         }
     }
 
+    public  boolean isStoragePermissionGranted() {
+        if (Build.VERSION.SDK_INT >= 23) {
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                Log.v("DirectTalk9","Permission is granted");
+                return true;
+            } else {
+                Log.v("DirectTalk9","Permission is revoked");
+                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
+                return false;
+            }
+        }
+        else { //permission is automatically granted on sdk<23 upon installation
+            Log.v("DirectTalk9","Permission is granted");
+            return true;
+        }
+    }
     @Override
     public void onBackPressed() {
         //        super.onBackPressed();

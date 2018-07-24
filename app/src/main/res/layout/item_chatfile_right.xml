@@ -67,12 +67,14 @@
         </LinearLayout>
 
         <LinearLayout
+            android:id="@+id/msgLine_item"
+            android:background="@drawable/bubbleright"
             android:orientation="vertical"
+            android:padding="10dp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content">
             <TextView
                 android:id="@+id/msg_item"
-                android:background="@drawable/bubbleright"
                 android:layout_marginLeft="5dp"
                 android:layout_marginRight="3dp"
                 android:textSize="18dp"
@@ -80,6 +82,21 @@
                 android:layout_height="wrap_content"
                 android:maxWidth="270dp"
                 android:text="msg"/>
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_weight="1"
+                android:background="@android:color/darker_gray"
+                android:visibility="visible"/>
+            <TextView
+                android:id="@+id/button_item"
+                android:layout_marginLeft="5dp"
+                android:layout_marginRight="3dp"
+                android:textSize="18dp"
+                android:textAlignment="center"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Download"/>
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

@@ -106,9 +106,14 @@ public class ChatRoomFragment extends Fragment{
                         long sortKey = 0;
                         ChatModel.Message message = item.child("lastmessage").getValue(ChatModel.Message.class);
                         if (message!=null) {
-                            chatRoomModel.setLastMsg(message.msg);
+                            //chatRoomModel.setLastMsg(message.msg);
                             sortKey = (long) message.timestamp;
                             chatRoomModel.setLastDatetime(simpleDateFormat.format(new Date(sortKey)));
+                            switch(message.msgtype){
+                                case "1": chatRoomModel.setLastMsg("Image"); break;
+                                case "2": chatRoomModel.setLastMsg("File"); break;
+                                default:  chatRoomModel.setLastMsg(message.msg);
+                            }
                         }
 
                         sortRoomList.put(sortKey, chatRoomModel);
