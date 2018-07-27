@@ -141,6 +141,7 @@ public class ChatActivity extends AppCompatActivity {
         };
     }
 
+    // get a user info
     void getUserInfoFromServer(String id){
         db.child("users").child(id).addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
@@ -154,6 +155,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // Returns the room ID after locating the chatting room with the user ID.
     void findChatRoom(final String toUid){
         db.child("rooms").orderByChild("users/"+myUid).equalTo("i").addListenerForSingleValueEvent(new ValueEventListener(){
             @Override
@@ -172,6 +174,7 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // get user list in a chatting room
     void setChatRoom(String rid) {
         roomID = rid;
         db.child("rooms").child(roomID).child("users").addListenerForSingleValueEvent(new ValueEventListener() {
@@ -199,7 +202,7 @@ public class ChatActivity extends AppCompatActivity {
     private void sendMessage(String msg, String msgtype) {
         sendBtn.setEnabled(false);
 
-        if (roomID==null) {             // two user
+        if (roomID==null) {             // create chatting room for two user
             ChatModel chatModel = new ChatModel();
             for( String key : userList.keySet() ){
                 chatModel.users.put(key, "i");
@@ -215,7 +218,10 @@ public class ChatActivity extends AppCompatActivity {
         messages.msg = msg;
         messages.msgtype=msgtype;
         messages.timestamp = ServerValue.TIMESTAMP;
-        db.child("rooms").child(roomID).child("lastmessage").setValue(messages);    // save last message
+
+        // save last message
+        db.child("rooms").child(roomID).child("lastmessage").setValue(messages);
+
         // save message
         messages.readUsers.put(myUid, true);
         db.child("rooms").child(roomID).child("messages").push().setValue(messages).addOnCompleteListener(new OnCompleteListener<Void>() {
@@ -225,6 +231,7 @@ public class ChatActivity extends AppCompatActivity {
                 sendBtn.setEnabled(true);
             }
         });
+
         // inc unread message count
         db.child("rooms").child(roomID).child("users").addListenerForSingleValueEvent(new ValueEventListener() {
             @Override
@@ -283,7 +290,7 @@ public class ChatActivity extends AppCompatActivity {
          }
     }
 
-    // upload image / file
+    // choose image
     Button.OnClickListener imageBtnClickListener = new View.OnClickListener() {
         public void onClick(final View view) {
             Intent intent = new Intent(Intent.ACTION_PICK);
@@ -291,6 +298,8 @@ public class ChatActivity extends AppCompatActivity {
             startActivityForResult(intent, PICK_FROM_ALBUM);
         }
     };
+
+    // choose file
     Button.OnClickListener fileBtnClickListener = new View.OnClickListener() {
         public void onClick(final View view) {
             Intent intent = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
@@ -300,6 +309,7 @@ public class ChatActivity extends AppCompatActivity {
         }
     };
 
+    // uploading image / file
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (resultCode!= this.RESULT_OK) { return;}
@@ -309,7 +319,7 @@ public class ChatActivity extends AppCompatActivity {
         if (requestCode ==PICK_FROM_FILE) {
             //File file= new File(fileUri.getRootPath());
             showProgressDialog("Uploading selected File.");
-            final ChatModel.FileInfo fileinfo  = getFileDetailFromUri(getApplicationContext(), fileUri);//file.getName();
+            final ChatModel.FileInfo fileinfo  = getFileDetailFromUri(getApplicationContext(), fileUri);
 
             storageReference.child("files/"+filename).putFile(fileUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
                 @Override
@@ -348,29 +358,30 @@ public class ChatActivity extends AppCompatActivity {
                 });
     }
 
+    // get file name and size from Uri
     public static ChatModel.FileInfo getFileDetailFromUri(final Context context, final Uri uri) {
-        ChatModel.FileInfo fileDetail = null;
-        if (uri != null) {
-            fileDetail = new ChatModel.FileInfo();
-            // File Scheme.
-            if (ContentResolver.SCHEME_FILE.equals(uri.getScheme())) {
-                File file = new File(uri.getPath());
-                fileDetail.filename = file.getName();
-                fileDetail.filesize = Util9.size2String(file.length());
-            }
-            // Content Scheme.
-            else if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
-                Cursor returnCursor =
-                        context.getContentResolver().query(uri, null, null, null, null);
-                if (returnCursor != null && returnCursor.moveToFirst()) {
-                    int nameIndex = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                    int sizeIndex = returnCursor.getColumnIndex(OpenableColumns.SIZE);
-                    fileDetail.filename = returnCursor.getString(nameIndex);
-                    fileDetail.filesize = Util9.size2String(returnCursor.getLong(sizeIndex));
-                    returnCursor.close();
-                }
+        if (uri == null) { return null; }
+
+        ChatModel.FileInfo fileDetail = new ChatModel.FileInfo();
+        // File Scheme.
+        if (ContentResolver.SCHEME_FILE.equals(uri.getScheme())) {
+            File file = new File(uri.getPath());
+            fileDetail.filename = file.getName();
+            fileDetail.filesize = Util9.size2String(file.length());
+        }
+        // Content Scheme.
+        else if (ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) {
+            Cursor returnCursor =
+                    context.getContentResolver().query(uri, null, null, null, null);
+            if (returnCursor != null && returnCursor.moveToFirst()) {
+                int nameIndex = returnCursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                int sizeIndex = returnCursor.getColumnIndex(OpenableColumns.SIZE);
+                fileDetail.filename = returnCursor.getString(nameIndex);
+                fileDetail.filesize = Util9.size2String(returnCursor.getLong(sizeIndex));
+                returnCursor.close();
             }
         }
+
         return fileDetail;
     }
 
@@ -414,27 +425,29 @@ public class ChatActivity extends AppCompatActivity {
 
             messageList = new ArrayList<>();
 
+            // get messages from server
             databaseReference = db.child("rooms").child(roomID).child("messages");
             valueEventListener = databaseReference.addValueEventListener(new ValueEventListener(){
                 @Override
                 public void onDataChange(DataSnapshot dataSnapshot) {
                     beforeDay = null;
                     messageList.clear();
+                    // Update number of messages unread to 0 => read all
                     db.child("rooms").child(roomID).child("unread").child(myUid).setValue(0);
 
-                    Map<String, Object> readUsers = new HashMap<>();
+                    Map<String, Object> unreadMessages = new HashMap<>();
                     for (DataSnapshot item: dataSnapshot.getChildren()) {
                         final ChatModel.Message message = item.getValue(ChatModel.Message.class);
                         if (!message.readUsers.containsKey(myUid)) {
                             message.readUsers.put(myUid, true);
-                            readUsers.put(item.getKey(), message);
+                            unreadMessages.put(item.getKey(), message);
                         }
-                        if (message.msgtype==null) message.msgtype="0"; // temp. this line will be deleted .
                         messageList.add(message);
                     }
 
-                    if (readUsers.size()>0) {
-                        db.child("rooms").child(roomID).child("messages").updateChildren(readUsers).addOnCompleteListener(new OnCompleteListener<Void>() {
+                    if (unreadMessages.size()>0) {
+                        // Marks read about unread messages
+                        db.child("rooms").child(roomID).child("messages").updateChildren(unreadMessages).addOnCompleteListener(new OnCompleteListener<Void>() {
                             @Override
                             public void onComplete(@NonNull Task<Void> task) {
                                 notifyDataSetChanged();
@@ -487,10 +500,10 @@ public class ChatActivity extends AppCompatActivity {
             String day = dateFormatDay.format( new Date( (long) message.timestamp) );
             String timestamp = dateFormatHour.format( new Date( (long) message.timestamp) );
             messageViewHolder.timestamp.setText(timestamp);
-            if ("0".equals(message.msgtype)) {
+            if ("0".equals(message.msgtype)) {                                      // text message
                 messageViewHolder.msg_item.setText(message.msg);
             } else
-            if ("2".equals(message.msgtype)) {      // file
+            if ("2".equals(message.msgtype)) {                                      // file transfer
                 db.child("rooms").child(roomID).child("files").child(message.msg).addListenerForSingleValueEvent(new ValueEventListener() {
                     @Override
                     public void onDataChange(DataSnapshot dataSnapshot) {
@@ -510,7 +523,7 @@ public class ChatActivity extends AppCompatActivity {
                     public void onCancelled(DatabaseError databaseError) {
                     }
                 });
-            } else {                                // image
+            } else {                                                                // image transfer
                 Glide.with(getApplicationContext())
                         .load(storageReference.child("filesmall/"+message.msg))
                         .apply(new RequestOptions().override(1000, 1000))
@@ -595,6 +608,7 @@ public class ChatActivity extends AppCompatActivity {
                     msgLine_item.setOnClickListener(downloadClickListener);
                 }
             }
+            // file download and open
             Button.OnClickListener downloadClickListener = new View.OnClickListener() {
                 public void onClick(View view) {
                     if ("Download".equals(button_item.getText())) {

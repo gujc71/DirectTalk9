@@ -79,6 +79,7 @@ public class ChatRoomFragment extends Fragment{
             storageReference  = FirebaseStorage.getInstance().getReference();
             myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
+            // all users information
             FirebaseDatabase.getInstance().getReference().child("users").addListenerForSingleValueEvent(new ValueEventListener(){
                 @Override
                 public void onDataChange(DataSnapshot dataSnapshot) {
@@ -93,6 +94,7 @@ public class ChatRoomFragment extends Fragment{
         }
 
         public void getRoomInfo() {
+            // my chatting room information
             FirebaseDatabase.getInstance().getReference().child("rooms").orderByChild("users/"+myUid).equalTo("i").addValueEventListener(new ValueEventListener(){
                 @Override
                 public void onDataChange(DataSnapshot dataSnapshot) {
