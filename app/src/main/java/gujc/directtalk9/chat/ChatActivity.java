@@ -72,6 +72,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 
+import gujc.directtalk9.photoview.ViewPagerActivity;
 import okhttp3.Call;
 import okhttp3.Callback;
 import okhttp3.MediaType;
@@ -524,6 +525,7 @@ public class ChatActivity extends AppCompatActivity {
                     }
                 });
             } else {                                                                // image transfer
+                messageViewHolder.realname = message.msg;
                 Glide.with(getApplicationContext())
                         .load(storageReference.child("filesmall/"+message.msg))
                         .apply(new RequestOptions().override(1000, 1000))
@@ -603,9 +605,12 @@ public class ChatActivity extends AppCompatActivity {
                 divider = view.findViewById(R.id.divider);
                 divider_date = view.findViewById(R.id.divider_date);
                 button_item = view.findViewById(R.id.button_item);
-                msgLine_item = view.findViewById(R.id.msgLine_item);
+                msgLine_item = view.findViewById(R.id.msgLine_item);        // for file
                 if (msgLine_item!=null) {
                     msgLine_item.setOnClickListener(downloadClickListener);
+                }
+                if (img_item!=null) {                                       // for image
+                    img_item.setOnClickListener(imageClickListener);
                 }
             }
             // file download and open
@@ -662,6 +667,15 @@ public class ChatActivity extends AppCompatActivity {
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     intent.setDataAndType(uri, type);//"application/vnd.android.package-archive");
                     startActivity(Intent.createChooser(intent, "Your title"));
+                }
+            };
+            // photo view
+            Button.OnClickListener imageClickListener = new View.OnClickListener() {
+                public void onClick(View view) {
+                    Intent intent = new Intent(getApplicationContext(), ViewPagerActivity.class);
+                    intent.putExtra("roomID", roomID);
+                    intent.putExtra("realname", realname);
+                    startActivity(intent);
                 }
             };
         }

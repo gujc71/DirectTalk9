@@ -34,6 +34,7 @@
         <activity android:name=".chat.ChatActivity" />
         <activity android:name=".chat.SelectUserActivity" />
         <activity android:name=".UserPWActivity"></activity>
+        <activity android:name=".photoview.ViewPagerActivity" />
 
         <service android:name=".common.MyFirebaseMessagingService">
             <intent-filter>
