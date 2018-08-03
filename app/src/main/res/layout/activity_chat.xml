@@ -1,50 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="vertical"
     tools:context=".chat.ChatActivity">
 
     <android.support.v7.widget.RecyclerView
         android:id="@+id/recyclerView"
-        android:layout_width="match_parent"
-        android:layout_height="464dp"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentTop="true"
-        android:layout_marginBottom="47dp" />
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:layout_weight="1000" />
 
-    <Button
-        android:id="@+id/imageBtn"
-        android:layout_width="40dp"
+    <LinearLayout
+        android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentLeft="true"
-        android:background="@android:drawable/ic_menu_gallery" />
+        android:layout_weight="1"
+        android:orientation="horizontal">
 
-    <Button
-        android:id="@+id/fileBtn"
-        android:layout_width="40dp"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentLeft="true"
-        android:layout_marginLeft="40dp"
-        android:background="@android:drawable/ic_menu_save" />
+        <Button
+            android:id="@+id/imageBtn"
+            android:layout_width="40dp"
+            android:layout_height="wrap_content"
+            android:background="@android:drawable/ic_menu_gallery" />
 
-    <EditText
-        android:id="@+id/msg_input"
-        android:layout_marginLeft="80dp"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_toLeftOf="@id/sendBtn"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentLeft="true"/>
+        <Button
+            android:id="@+id/fileBtn"
+            android:layout_width="40dp"
+            android:layout_height="wrap_content"
+            android:background="@android:drawable/ic_menu_save" />
 
-    <Button
-        android:id="@+id/sendBtn"
-        android:layout_width="40dp"
-        android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentRight="true"
-        android:background="@android:drawable/ic_menu_send"/>
-</RelativeLayout>
+        <EditText
+            android:id="@+id/msg_input"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            />
+
+        <Button
+            android:id="@+id/sendBtn"
+            android:layout_width="40dp"
+            android:layout_height="wrap_content"
+            android:background="@android:drawable/ic_menu_send"/>
+    </LinearLayout>
+</LinearLayout>

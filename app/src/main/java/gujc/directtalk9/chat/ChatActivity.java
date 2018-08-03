@@ -312,37 +312,24 @@ public class ChatActivity extends AppCompatActivity {
 
     // uploading image / file
     @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    public void onActivityResult(final int requestCode, int resultCode, Intent data) {
         if (resultCode!= this.RESULT_OK) { return;}
         Uri fileUri = data.getData();
         final String filename = Util9.getUniqueValue();
 
-        if (requestCode ==PICK_FROM_FILE) {
-            //File file= new File(fileUri.getRootPath());
-            showProgressDialog("Uploading selected File.");
-            final ChatModel.FileInfo fileinfo  = getFileDetailFromUri(getApplicationContext(), fileUri);
+        showProgressDialog("Uploading selected File.");
+        final ChatModel.FileInfo fileinfo  = getFileDetailFromUri(getApplicationContext(), fileUri);
 
-            storageReference.child("files/"+filename).putFile(fileUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
-                @Override
-                public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
-                    sendMessage(filename, "2");
-                    db.child("rooms").child(roomID).child("files").child(filename).setValue(fileinfo);    // save file information
-                    hideProgressDialog();
-                }
-            });
-            return;
-        }
-        if (requestCode != PICK_FROM_ALBUM) { return;}
-
-        showProgressDialog("Uploading selected Image.");
-        // upload image
         storageReference.child("files/"+filename).putFile(fileUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
             @Override
             public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
-                sendMessage(filename, "1");
+                sendMessage(filename, Integer.toString(requestCode));
+                db.child("rooms").child(roomID).child("files").child(filename).setValue(fileinfo);    // save file information
                 hideProgressDialog();
             }
         });
+        if (requestCode != PICK_FROM_ALBUM) { return;}
+
         // small image
         Glide.with(getApplicationContext())
                 .asBitmap()
@@ -418,7 +405,7 @@ public class ChatActivity extends AppCompatActivity {
         public RecyclerViewAdapter() {
             File dir = new File(rootPath);
             if (!dir.exists()) {
-                if (!isStoragePermissionGranted()) {
+                if (!Util9.isPermissionGranted(getParent(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                     return ;
                 }
                 dir.mkdirs();
@@ -623,7 +610,7 @@ public class ChatActivity extends AppCompatActivity {
                     }
                 }
                 public void download() {
-                    if (!isStoragePermissionGranted()) {
+                    if (!Util9.isPermissionGranted(getParent(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                         return ;
                     }
                     showProgressDialog("Downloading File.");
@@ -681,22 +668,6 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
-    public  boolean isStoragePermissionGranted() {
-        if (Build.VERSION.SDK_INT >= 23) {
-            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-                Log.v("DirectTalk9","Permission is granted");
-                return true;
-            } else {
-                Log.v("DirectTalk9","Permission is revoked");
-                ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 1);
-                return false;
-            }
-        }
-        else { //permission is automatically granted on sdk<23 upon installation
-            Log.v("DirectTalk9","Permission is granted");
-            return true;
-        }
-    }
     @Override
     public void onBackPressed() {
         //        super.onBackPressed();

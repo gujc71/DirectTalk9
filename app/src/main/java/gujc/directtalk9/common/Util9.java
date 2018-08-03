@@ -1,8 +1,13 @@
 package gujc.directtalk9.common;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Environment;
+import android.support.v4.app.ActivityCompat;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.InputMethodManager;
@@ -60,5 +65,22 @@ public class Util9 {
             sdPath = Environment.MEDIA_UNMOUNTED;
         }
         return sdPath;
+    }
+
+    public  static boolean isPermissionGranted(Activity activity, String permission) {
+        if (Build.VERSION.SDK_INT >= 23) {
+            if (activity.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) {
+                Log.v("DirectTalk9","Permission is granted");
+                return true;
+            } else {
+                Log.v("DirectTalk9","Permission is revoked");
+                ActivityCompat.requestPermissions(activity, new String[]{permission}, 1);
+                return false;
+            }
+        }
+        else { //permission is automatically granted on sdk<23 upon installation
+            Log.v("DirectTalk9","Permission is granted");
+            return true;
+        }
     }
 }
