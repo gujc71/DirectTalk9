@@ -23,14 +23,12 @@ import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.bumptech.glide.request.RequestOptions;
 import gujc.directtalk9.R;
 import gujc.directtalk9.chat.ChatActivity;
-import gujc.directtalk9.chat.SelectUserActivity;
 import gujc.directtalk9.model.ChatModel;
 import gujc.directtalk9.model.ChatRoomModel;
 import gujc.directtalk9.model.UserModel;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 import com.google.firebase.storage.FirebaseStorage;
@@ -205,6 +203,7 @@ public class ChatRoomFragment extends Fragment{
                 public void onClick(View v) {
                     Intent intent = new Intent(v.getContext(), ChatActivity.class);
                     intent.putExtra("roomID", chatRoomModel.getRoomID());
+                    intent.putExtra("roomTitle", chatRoomModel.getTitle());
                     startActivity(intent);
                 }
             });

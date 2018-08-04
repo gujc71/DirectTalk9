@@ -64,6 +64,7 @@ public class SelectUserActivity extends AppCompatActivity {
                         Intent intent = new Intent(SelectUserActivity.this, ChatActivity.class);
                         intent.putExtra("roomID", room_id);
                         startActivity(intent);
+                        SelectUserActivity.this.finish();
                     }
                 });
             }

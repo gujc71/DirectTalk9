@@ -1,6 +1,7 @@
 package gujc.directtalk9.chat;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -17,13 +18,17 @@ import android.provider.OpenableColumns;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.FileProvider;
+import android.support.v7.app.ActionBar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
+import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
 import android.webkit.MimeTypeMap;
 import android.widget.Button;
 import android.widget.EditText;
@@ -107,6 +112,11 @@ public class ChatActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
 
+        ActionBar actionBar = getSupportActionBar();
+        actionBar.setIcon(R.drawable.back);
+        actionBar.setDisplayHomeAsUpEnabled(true);
+        actionBar.setHomeButtonEnabled(true);
+
         db = FirebaseDatabase.getInstance().getReference();
         storageReference  = FirebaseStorage.getInstance().getReference();
 
@@ -116,6 +126,10 @@ public class ChatActivity extends AppCompatActivity {
         myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
         String toUid = getIntent().getStringExtra("toUid");
         String param_room_id = getIntent().getStringExtra("roomID");
+        String roomTitle = getIntent().getStringExtra("roomTitle");
+        if (roomTitle!=null) {
+            actionBar.setTitle(roomTitle);
+        }
 
         recyclerView = findViewById(R.id.recyclerView);
         msg_input = findViewById(R.id.msg_input);
@@ -142,6 +156,18 @@ public class ChatActivity extends AppCompatActivity {
         };
     }
 
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item)
+    {
+        switch (item.getItemId())
+        {
+            case android.R.id.home:
+                onBackPressed();
+                return true;
+            default:
+                return super.onOptionsItemSelected(item);
+        }
+    }
     // get a user info
     void getUserInfoFromServer(String id){
         db.child("users").child(id).addListenerForSingleValueEvent(new ValueEventListener() {

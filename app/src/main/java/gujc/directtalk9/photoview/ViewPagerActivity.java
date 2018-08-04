@@ -62,6 +62,8 @@ public class ViewPagerActivity extends AppCompatActivity {
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_view_pager);
+		Toolbar toolbar = (Toolbar)findViewById(R.id.toolbar);
+		setSupportActionBar(toolbar);
 
 		roomID = getIntent().getStringExtra("roomID");
 		realname = getIntent().getStringExtra("realname");
@@ -73,7 +75,7 @@ public class ViewPagerActivity extends AppCompatActivity {
 		//findViewById(R.id.rotateBtn).setOnClickListener(rotateBtnClickListener);
 
         ActionBar actionBar = getSupportActionBar();
-        actionBar.setIcon(R.drawable.back);
+        //actionBar.setIcon(R.drawable.back);
         actionBar.setTitle("PhotoView");
 		actionBar.setDisplayHomeAsUpEnabled(true);
 		actionBar.setHomeButtonEnabled(true);
