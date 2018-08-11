@@ -31,7 +31,7 @@
             android:theme="@style/AppTheme.NoActionBar">
         </activity>
         <activity android:name=".LoginActivity" />
-        <activity android:name=".chat.ChatActivity" />
+        <activity android:name=".chat.ChatActivity" android:theme="@style/AppTheme.NoActionBar" />
         <activity android:name=".chat.SelectUserActivity" />
         <activity android:name=".UserPWActivity"></activity>
         <activity android:name=".photoview.ViewPagerActivity" android:theme="@style/AppTheme.NoActionBar" />

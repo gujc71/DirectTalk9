@@ -29,56 +29,97 @@ import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.storage.FirebaseStorage;
+import com.google.firebase.storage.StorageReference;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class SelectUserActivity extends AppCompatActivity {
-
-    ChatModel selectedUsers = new ChatModel();
+    private String roomID;
+    public Map<String, String> selectedUsers = new HashMap<>() ;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_select_user);
 
+        roomID = getIntent().getStringExtra("roomID");
+
         RecyclerView recyclerView = findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager( new LinearLayoutManager((this)));
         recyclerView.setAdapter(new UserListRecyclerViewAdapter());
 
         Button makeRoomBtn = findViewById(R.id.makeRoomBtn);
-        makeRoomBtn.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(final View v) {
-                if (selectedUsers.users.size() <2) {
-                    Util9.showMessage(getApplicationContext(), "Please select 2 or more user");
-                    return;
-                }
-                String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
-                selectedUsers.users.put(uid, "i");
-                final String room_id = FirebaseDatabase.getInstance().getReference().child("rooms").push().getKey();
-
-                FirebaseDatabase.getInstance().getReference().child("rooms/"+room_id).setValue(selectedUsers).addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Intent intent = new Intent(SelectUserActivity.this, ChatActivity.class);
-                        intent.putExtra("roomID", room_id);
-                        startActivity(intent);
-                        SelectUserActivity.this.finish();
-                    }
-                });
-            }
-        });
+        if (roomID==null)
+             makeRoomBtn.setOnClickListener(makeRoomClickListener);
+        else makeRoomBtn.setOnClickListener(addRoomUserClickListener);
     }
 
+    Button.OnClickListener makeRoomClickListener = new View.OnClickListener() {
+        public void onClick(View view) {
+            if (selectedUsers.size() <2) {
+                Util9.showMessage(getApplicationContext(), "Please select 2 or more user");
+                return;
+            }
+            String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+            selectedUsers.put(uid, "i");
+            final String room_id = FirebaseDatabase.getInstance().getReference().child("rooms").push().getKey();
+
+            FirebaseDatabase.getInstance().getReference().child("rooms/"+room_id).child("users").setValue(selectedUsers).addOnSuccessListener(new OnSuccessListener<Void>() {
+                @Override
+                public void onSuccess(Void aVoid) {
+                    Intent intent = new Intent(SelectUserActivity.this, ChatActivity.class);
+                    intent.putExtra("roomID", room_id);
+                    startActivity(intent);
+                    SelectUserActivity.this.finish();
+                }
+            });
+        }
+    };
+
+    Button.OnClickListener addRoomUserClickListener = new View.OnClickListener() {
+        public void onClick(View view) {
+            if (selectedUsers.size() <1) {
+                Util9.showMessage(getApplicationContext(), "Please select 1 or more user");
+                return;
+            }
+
+            FirebaseDatabase.getInstance().getReference().child("rooms").child(roomID).child("users").addListenerForSingleValueEvent(new ValueEventListener() {
+                @Override
+                public void onDataChange(DataSnapshot dataSnapshot) {
+                    for (final DataSnapshot item : dataSnapshot.getChildren()) {
+                        selectedUsers.put(item.getKey(), (String) item.getValue());
+                    }
+                    FirebaseDatabase.getInstance().getReference().child("rooms/"+roomID).child("users").setValue(selectedUsers).addOnSuccessListener(new OnSuccessListener<Void>() {
+                        @Override
+                        public void onSuccess(Void aVoid) {
+                            Intent intent = new Intent(SelectUserActivity.this, ChatActivity.class);
+                            intent.putExtra("roomID", roomID);
+                            startActivity(intent);
+                            SelectUserActivity.this.finish();
+                        }
+                    });
+                }
+
+                @Override
+                public void onCancelled(DatabaseError databaseError) { }
+            });
+        }
+    };
     class UserListRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
 
         final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
         List<UserModel> userModels;
+        private StorageReference storageReference;
 
         public UserListRecyclerViewAdapter() {
+            storageReference  = FirebaseStorage.getInstance().getReference();
             userModels = new ArrayList<>();
             final String myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+
             FirebaseDatabase.getInstance().getReference().child("users").addValueEventListener(new ValueEventListener() {
                 @Override
                 public void onDataChange(DataSnapshot dataSnapshot) {
@@ -103,7 +144,7 @@ public class SelectUserActivity extends AppCompatActivity {
         @Override
         public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.item_select_user, parent, false);
-            return new SelectUserActivity.CustomViewHolder(view);
+            return new CustomViewHolder(view);
         }
 
         @Override
@@ -118,18 +159,19 @@ public class SelectUserActivity extends AppCompatActivity {
                         .apply(requestOptions)
                         .into(customViewHolder.user_photo);
             } else{
-                Glide.with(getApplicationContext()).load(user.getUserphoto())
+                Glide.with(getApplicationContext())
+                        .load(storageReference.child("userPhoto/"+user.getUserphoto()))
                         .apply(requestOptions)
                         .into(customViewHolder.user_photo);
             }
 
-            ((SelectUserActivity.CustomViewHolder)holder).userChk.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            ((CustomViewHolder)holder).userChk.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 if (isChecked) {
-                    selectedUsers.users.put(user.getUid(), "i");
+                    selectedUsers.put(user.getUid(), "i");
                 } else {
-                    selectedUsers.users.remove(user.getUid());
+                    selectedUsers.remove(user.getUid());
                 }
                 }
             });
