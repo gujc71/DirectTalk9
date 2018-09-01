@@ -1,6 +1,9 @@
 package gujc.directtalk9.model;
 
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class ChatModel {
@@ -11,8 +14,10 @@ public class ChatModel {
         public String uid;
         public String msg;
         public String msgtype;          // 0: msg, 1: image, 2: file
-        public Object timestamp;
-        public Map<String, Object> readUsers = new HashMap<>();
+        public Date timestamp;
+        public List<String> readUsers = new ArrayList<>();
+        public String filename;
+        public String filesize;
     }
 
     public static class FileInfo {

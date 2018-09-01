@@ -3,6 +3,7 @@ package gujc.directtalk9.chat;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -21,14 +22,17 @@ import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
 import com.bumptech.glide.request.RequestOptions;
 import gujc.directtalk9.R;
 import gujc.directtalk9.common.Util9;
-import gujc.directtalk9.model.ChatModel;
 import gujc.directtalk9.model.UserModel;
-import com.google.android.gms.tasks.OnSuccessListener;
+
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 
@@ -39,7 +43,8 @@ import java.util.Map;
 
 public class SelectUserActivity extends AppCompatActivity {
     private String roomID;
-    public Map<String, String> selectedUsers = new HashMap<>() ;
+    //private List<String> selectedUsers = new ArrayList<>() ;
+    private Map<String, String> selectedUsers = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -64,19 +69,11 @@ public class SelectUserActivity extends AppCompatActivity {
                 Util9.showMessage(getApplicationContext(), "Please select 2 or more user");
                 return;
             }
-            String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
-            selectedUsers.put(uid, "i");
-            final String room_id = FirebaseDatabase.getInstance().getReference().child("rooms").push().getKey();
 
-            FirebaseDatabase.getInstance().getReference().child("rooms/"+room_id).child("users").setValue(selectedUsers).addOnSuccessListener(new OnSuccessListener<Void>() {
-                @Override
-                public void onSuccess(Void aVoid) {
-                    Intent intent = new Intent(SelectUserActivity.this, ChatActivity.class);
-                    intent.putExtra("roomID", room_id);
-                    startActivity(intent);
-                    SelectUserActivity.this.finish();
-                }
-            });
+            selectedUsers.put(FirebaseAuth.getInstance().getCurrentUser().getUid(), "");
+
+            DocumentReference newRoom = FirebaseFirestore.getInstance().collection("rooms").document();
+            CreateChattingRoom(newRoom);
         }
     };
 
@@ -86,58 +83,85 @@ public class SelectUserActivity extends AppCompatActivity {
                 Util9.showMessage(getApplicationContext(), "Please select 1 or more user");
                 return;
             }
-
-            FirebaseDatabase.getInstance().getReference().child("rooms").child(roomID).child("users").addListenerForSingleValueEvent(new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    for (final DataSnapshot item : dataSnapshot.getChildren()) {
-                        selectedUsers.put(item.getKey(), (String) item.getValue());
-                    }
-                    FirebaseDatabase.getInstance().getReference().child("rooms/"+roomID).child("users").setValue(selectedUsers).addOnSuccessListener(new OnSuccessListener<Void>() {
-                        @Override
-                        public void onSuccess(Void aVoid) {
-                            Intent intent = new Intent(SelectUserActivity.this, ChatActivity.class);
-                            intent.putExtra("roomID", roomID);
-                            startActivity(intent);
-                            SelectUserActivity.this.finish();
-                        }
-                    });
-                }
-
-                @Override
-                public void onCancelled(DatabaseError databaseError) { }
-            });
+            CreateChattingRoom(FirebaseFirestore.getInstance().collection("rooms").document(roomID) );
         }
     };
+
+    public void CreateChattingRoom(final DocumentReference room) {
+        String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+        Map<String, Integer> users = new HashMap<>();
+        String title = "";
+        for( String key : selectedUsers.keySet()) {
+            users.put(key, 0);
+            if (title.length() < 20 & !key.equals(uid)) {
+                title += selectedUsers.get(key) + ", ";
+            }
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("title", title.substring(0, title.length() - 2));
+        data.put("users", users);
+
+        room.set(data).addOnCompleteListener(new OnCompleteListener<Void>() {
+            @Override
+            public void onComplete(@NonNull Task<Void> task) {
+                if (task.isSuccessful()) {
+                    Intent intent = new Intent(SelectUserActivity.this, ChatActivity.class);
+                    intent.putExtra("roomID", room.getId());
+                    startActivity(intent);
+                    SelectUserActivity.this.finish();
+                }
+            }
+        });
+
+        /*Map<String, Integer> data = new HashMap<>();
+        data.put("unread", 0);
+
+        WriteBatch batch = FirebaseFirestore.getInstance().batch();
+
+        for (String el : selectedUsers) {
+            batch.set(room.collection("users").document(el), data);
+        }
+        batch.commit().addOnCompleteListener(new OnCompleteListener<Void>() {
+            @Override
+            public void onComplete(@NonNull Task<Void> task) {
+                if (task.isSuccessful()) {
+                    Intent intent = new Intent(SelectUserActivity.this, ChatActivity.class);
+                    intent.putExtra("roomID", room.getId());
+                    startActivity(intent);
+                    SelectUserActivity.this.finish();
+                }
+            }
+        });*/
+    }
+
     class UserListRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
 
         final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
         List<UserModel> userModels;
         private StorageReference storageReference;
 
-        public UserListRecyclerViewAdapter() {
+        UserListRecyclerViewAdapter() {
             storageReference  = FirebaseStorage.getInstance().getReference();
             userModels = new ArrayList<>();
             final String myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-            FirebaseDatabase.getInstance().getReference().child("users").addValueEventListener(new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    userModels.clear();
-                    for(DataSnapshot snapshot: dataSnapshot.getChildren()) {
-                        UserModel userModel = snapshot.getValue(UserModel.class);
-                        if (myUid.equals(userModel.getUid())) continue;
+            FirebaseFirestore.getInstance().collection("users")
+                    .addSnapshotListener(new EventListener<QuerySnapshot>() {
+                        @Override
+                        public void onEvent(@Nullable QuerySnapshot value,
+                                            @Nullable FirebaseFirestoreException e) {
+                            if (e != null) {return;}
+                            userModels.clear();
 
-                        userModels.add(userModel);
-                    }
-                    notifyDataSetChanged();
-                }
+                            for (QueryDocumentSnapshot doc : value) {
+                                UserModel userModel = doc.toObject(UserModel.class);
+                                if (myUid.equals(userModel.getUid())) continue;
 
-                @Override
-                public void onCancelled(DatabaseError databaseError) {
-
-                }
-            });
+                                userModels.add(userModel);
+                            }
+                            notifyDataSetChanged();
+                        }
+                    });
         }
 
         @NonNull
@@ -150,17 +174,17 @@ public class SelectUserActivity extends AppCompatActivity {
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             CustomViewHolder customViewHolder = (CustomViewHolder) holder;
-            final UserModel user = userModels.get(position);
+            final UserModel userModel = userModels.get(position);
 
-            customViewHolder.user_name.setText(user.getUsernm());
+            customViewHolder.user_name.setText(userModel.getUsernm());
 
-            if (user.getUserphoto()==null) {
+            if (userModel.getUserphoto()==null) {
                 Glide.with(getApplicationContext()).load(R.drawable.user)
                         .apply(requestOptions)
                         .into(customViewHolder.user_photo);
             } else{
                 Glide.with(getApplicationContext())
-                        .load(storageReference.child("userPhoto/"+user.getUserphoto()))
+                        .load(storageReference.child("userPhoto/"+userModel.getUserphoto()))
                         .apply(requestOptions)
                         .into(customViewHolder.user_photo);
             }
@@ -168,11 +192,11 @@ public class SelectUserActivity extends AppCompatActivity {
             ((CustomViewHolder)holder).userChk.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
                 @Override
                 public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-                if (isChecked) {
-                    selectedUsers.put(user.getUid(), "i");
-                } else {
-                    selectedUsers.remove(user.getUid());
-                }
+                    if (isChecked) {
+                        selectedUsers.put(userModel.getUid(), userModel.getUsernm());
+                    } else {
+                        selectedUsers.remove(userModel.getUid());
+                    }
                 }
             });
         }
@@ -188,7 +212,7 @@ public class SelectUserActivity extends AppCompatActivity {
         public TextView user_name;
         public CheckBox userChk;
 
-        public CustomViewHolder(View view) {
+        CustomViewHolder(View view) {
             super(view);
             user_photo = view.findViewById(R.id.user_photo);
             user_name = view.findViewById(R.id.user_name);

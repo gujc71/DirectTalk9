@@ -42,12 +42,17 @@ import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.DatabaseReference;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ServerValue;
-import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.CollectionReference;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
+import com.google.firebase.firestore.SetOptions;
+import com.google.firebase.firestore.WriteBatch;
 import com.google.firebase.storage.FileDownloadTask;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
@@ -59,19 +64,14 @@ import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.TreeMap;
 
 import gujc.directtalk9.R;
-import gujc.directtalk9.chat.ChatActivity;
 import gujc.directtalk9.common.Util9;
 import gujc.directtalk9.model.ChatModel;
-import gujc.directtalk9.model.ChatRoomModel;
 import gujc.directtalk9.model.NotificationModel;
 import gujc.directtalk9.model.UserModel;
 import gujc.directtalk9.photoview.ViewPagerActivity;
@@ -101,12 +101,13 @@ public class ChatFragment extends Fragment{
     private String toUid;
     private Map<String, UserModel> userList = new HashMap<>();
 
-    private DatabaseReference databaseReference;
-    private ValueEventListener valueEventListener;
-    private DatabaseReference db=null;
+    //private DatabaseReference databaseReference;
+    //private ValueEventListener valueEventListener;
+    private FirebaseFirestore firestore=null;
     private StorageReference storageReference;
 
     private ProgressDialog progressDialog = null;
+    private Integer userCount = 0;
 
     public ChatFragment() {
     }
@@ -119,6 +120,7 @@ public class ChatFragment extends Fragment{
         f.setArguments(bdl);
         return f;
     }
+
     @Nullable
     @Override
     public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, Bundle savedInstanceState) {
@@ -145,7 +147,7 @@ public class ChatFragment extends Fragment{
             toUid = getArguments().getString("toUid");
         }
 
-        db = FirebaseDatabase.getInstance().getReference();
+        firestore = FirebaseFirestore.getInstance();
         storageReference  = FirebaseStorage.getInstance().getReference();
 
         dateFormatDay.setTimeZone(TimeZone.getTimeZone("Asia/Seoul"));
@@ -167,6 +169,7 @@ public class ChatFragment extends Fragment{
         if (roomID==null) {                                                     // new room for two user
             getUserInfoFromServer(myUid);
             getUserInfoFromServer(toUid);
+            userCount = 2;
         };
 
         return view;
@@ -174,54 +177,90 @@ public class ChatFragment extends Fragment{
 
     // get a user info
     void getUserInfoFromServer(String id){
-        db.child("users").child(id).addListenerForSingleValueEvent(new ValueEventListener() {
+        firestore.collection("users").document(id).get().addOnSuccessListener(new OnSuccessListener<DocumentSnapshot>() {
             @Override
-            public void onDataChange(DataSnapshot dataSnapshot) {
-                UserModel userModel = dataSnapshot.getValue(UserModel.class);
+            public void onSuccess(DocumentSnapshot documentSnapshot) {
+                UserModel userModel = documentSnapshot.toObject(UserModel.class);
                 userList.put(userModel.getUid(), userModel);
-            }
-            @Override
-            public void onCancelled(DatabaseError databaseError) {
+                if (userCount == userList.size()) {
+                    recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+                    recyclerView.setAdapter(new RecyclerViewAdapter());
+                }
             }
         });
     }
 
     // Returns the room ID after locating the chatting room with the user ID.
     void findChatRoom(final String toUid){
-        db.child("rooms").orderByChild("users/"+myUid).equalTo("i").addListenerForSingleValueEvent(new ValueEventListener(){
-            @Override
-            public void onDataChange(DataSnapshot dataSnapshot) {
-                for (DataSnapshot item: dataSnapshot.getChildren()) {
-                    Map<String, String> users = (Map<String, String>) item.child("users").getValue();
-                    if (users.size()==2 && users.containsKey(toUid)) {
-                        setChatRoom(item.getKey());
-                        break;
-                    }
-                }
-            }
+        firestore.collection("rooms").whereGreaterThanOrEqualTo("users."+myUid, 0).get()
+                .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+                    @Override
+                    public void onComplete(@NonNull Task<QuerySnapshot> task) {
+                        if (!task.isSuccessful()) {return;}
 
-            @Override
-            public void onCancelled(DatabaseError databaseError) {   }
-        });
+                        for (QueryDocumentSnapshot document : task.getResult()) {
+                            Map<String, Long> users = (Map<String, Long>) document.get("users");
+                            if (users.size()==2 & users.get(toUid)!=null){
+                                setChatRoom(document.getId());
+                                break;
+                            }
+                        }
+                    }
+                });
     }
 
     // get user list in a chatting room
     void setChatRoom(String rid) {
         roomID = rid;
-        db.child("rooms").child(roomID).child("users").addListenerForSingleValueEvent(new ValueEventListener() {
+        firestore.collection("rooms").document(roomID).get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
             @Override
-            public void onDataChange(DataSnapshot dataSnapshot) {
-                for (DataSnapshot item: dataSnapshot.getChildren()) {
-                    getUserInfoFromServer(item.getKey());
+            public void onComplete(@NonNull Task<DocumentSnapshot> task) {
+                if (!task.isSuccessful()) {return;}
+                DocumentSnapshot document = task.getResult();
+                Map<String, Long> users = (Map<String, Long>) document.get("users");
+
+                for( String key : users.keySet() ){
+                    getUserInfoFromServer(key);
                 }
-                recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-                recyclerView.setAdapter(new RecyclerViewAdapter());
+                userCount = users.size();
+                //users.put(myUid, (long) 0);
+                //document.getReference().update("users", users);
             }
-            @Override
-            public void onCancelled(DatabaseError databaseError) {}
         });
     }
+    void setUnread2Read() {
+        firestore.collection("rooms").document(roomID).get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
+            @Override
+            public void onComplete(@NonNull Task<DocumentSnapshot> task) {
+                if (!task.isSuccessful()) {return;}
+                DocumentSnapshot document = task.getResult();
+                Map<String, Long> users = (Map<String, Long>) document.get("users");
 
+                users.put(myUid, (long) 0);
+                document.getReference().update("users", users);
+            }
+        });
+    }
+    public void CreateChattingRoom(final DocumentReference room) {
+        Map<String, Integer> users = new HashMap<>();
+        String title = "";
+        for( String key : userList.keySet() ){
+            users.put(key, 0);
+        }
+        Map<String, Object> data = new HashMap<>();
+        data.put("title", null);
+        data.put("users", users);
+
+        room.set(data).addOnCompleteListener(new OnCompleteListener<Void>() {
+            @Override
+            public void onComplete(@NonNull Task<Void> task) {
+                if (task.isSuccessful()) {
+                    recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+                    recyclerView.setAdapter(new RecyclerViewAdapter());
+                }
+            }
+        });
+    }
     public Map<String, UserModel> getUserList() {
         return userList;
     }
@@ -229,70 +268,72 @@ public class ChatFragment extends Fragment{
     Button.OnClickListener sendBtnClickListener = new View.OnClickListener() {
         public void onClick(View view) {
             String msg = msg_input.getText().toString();
-            sendMessage(msg, "0");
+            sendMessage(msg, "0", null);
             msg_input.setText("");
         }
     };
 
-    private void sendMessage(String msg, String msgtype) {
+    private void sendMessage(final String msg, String msgtype, final ChatModel.FileInfo fileinfo) {
         sendBtn.setEnabled(false);
 
         if (roomID==null) {             // create chatting room for two user
-            ChatModel chatModel = new ChatModel();
-            for( String key : userList.keySet() ){
-                chatModel.users.put(key, "i");
-            }
-            roomID = db.child("rooms").push().getKey();
-            db.child("rooms/"+roomID).setValue(chatModel);
-            recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-            recyclerView.setAdapter(new RecyclerViewAdapter());
+            roomID = firestore.collection("rooms").document().getId();
+            CreateChattingRoom( firestore.collection("rooms").document(roomID) );
         }
 
-        ChatModel.Message messages = new ChatModel.Message();
-        messages.uid = myUid;
-        messages.msg = msg;
-        messages.msgtype=msgtype;
-        messages.timestamp = ServerValue.TIMESTAMP;
+        final Map<String,Object> messages = new HashMap<>();
+        messages.put("uid", myUid);
+        messages.put("msg", msg);
+        messages.put("msgtype", msgtype);
+        messages.put("timestamp", FieldValue.serverTimestamp());
+        if (fileinfo!=null){
+            messages.put("filename", fileinfo.filename);
+            messages.put("filesize", fileinfo.filesize);
+        }
 
-        // save last message
-        db.child("rooms").child(roomID).child("lastmessage").setValue(messages);
-
-        // save message
-        messages.readUsers.put(myUid, true);
-        db.child("rooms").child(roomID).child("messages").push().setValue(messages).addOnCompleteListener(new OnCompleteListener<Void>() {
+        final DocumentReference docRef = firestore.collection("rooms").document(roomID);
+        docRef.get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
             @Override
-            public void onComplete(@NonNull Task<Void> task) {
-                //sendGCM();
-                sendBtn.setEnabled(true);
-            }
-        });
+            public void onComplete(@NonNull Task<DocumentSnapshot> task) {
+                if (!task.isSuccessful()) {return;}
 
-        // inc unread message count
-        db.child("rooms").child(roomID).child("users").addListenerForSingleValueEvent(new ValueEventListener() {
-            @Override
-            public void onDataChange(DataSnapshot dataSnapshot) {
-                for (final DataSnapshot item : dataSnapshot.getChildren()) {
-                    final String uid = item.getKey();
-                    if (!myUid.equals(item.getKey())) {
-                        db.child("rooms").child(roomID).child("unread").child(item.getKey()).addListenerForSingleValueEvent(new ValueEventListener() {
-                            @Override
-                            public void onDataChange(DataSnapshot dataSnapshot) {
-                                Integer cnt = dataSnapshot.getValue(Integer.class);
-                                if (cnt==null) cnt=0;
-                                db.child("rooms").child(roomID).child("unread").child(uid).setValue(cnt+1);
-                            }
+                WriteBatch batch = firestore.batch();
 
-                            @Override
-                            public void onCancelled(DatabaseError databaseError) {
+                // save last message
+                batch.set(docRef, messages, SetOptions.merge());
 
-                            }
-                        });
-                    }
+                // save message
+                List<String> readUsers = new ArrayList();
+                readUsers.add(myUid);
+                messages.put("readUsers", readUsers);//new String[]{myUid} );
+                batch.set(docRef.collection("messages").document(), messages);
+
+                // inc unread message count
+                DocumentSnapshot document = task.getResult();
+                Map<String, Long> users = (Map<String, Long>) document.get("users");
+
+                for( String key : users.keySet() ){
+                    if (!myUid.equals(key)) users.put(key, users.get(key)+1);
                 }
+                document.getReference().update("users", users);
+
+                //final Map<String,Object> files = new HashMap<>();
+                //files.put(msg, fileinfo);
+
+//                batch.set(docRef.collection("files").document(msg), fileinfo);
+                //db.child("rooms").child(roomID).child("files").child(filename).setValue(fileinfo);    // save file information
+
+                batch.commit().addOnCompleteListener(new OnCompleteListener<Void>() {
+                    @Override
+                    public void onComplete(@NonNull Task<Void> task) {
+                        if (task.isSuccessful()) {
+                            //sendGCM();
+                            sendBtn.setEnabled(true);
+                        }
+                    }
+                });
             }
 
-            @Override
-            public void onCancelled(DatabaseError databaseError) { }
         });
     };
 
@@ -357,8 +398,7 @@ public class ChatFragment extends Fragment{
         storageReference.child("files/"+filename).putFile(fileUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
             @Override
             public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
-                sendMessage(filename, Integer.toString(requestCode));
-                db.child("rooms").child(roomID).child("files").child(filename).setValue(fileinfo);    // save file information
+                sendMessage(filename, Integer.toString(requestCode), fileinfo);
                 hideProgressDialog();
             }
         });
@@ -411,13 +451,10 @@ public class ChatFragment extends Fragment{
         if (progressDialog==null) {
             progressDialog = new ProgressDialog(getContext());
         }
-        //progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
         progressDialog.setIndeterminate(true);
         progressDialog.setTitle(title);
         progressDialog.setMessage("Please wait..");
         progressDialog.setCancelable(false);
-        //progressDialog.setMax(100);
-        //progressDialog.setProgress(0);
         progressDialog.show();
     }
     public void setProgressDialog(int value) {
@@ -436,7 +473,7 @@ public class ChatFragment extends Fragment{
         MessageViewHolder beforeViewHolder;
         String rootPath = Util9.getRootPath()+"/DirectTalk9/";
 
-        public RecyclerViewAdapter() {
+        RecyclerViewAdapter() {
             File dir = new File(rootPath);
             if (!dir.exists()) {
                 if (!Util9.isPermissionGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
@@ -447,44 +484,31 @@ public class ChatFragment extends Fragment{
 
             messageList = new ArrayList<>();
 
-            // get messages from server
-            databaseReference = db.child("rooms").child(roomID).child("messages");
-            valueEventListener = databaseReference.addValueEventListener(new ValueEventListener(){
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    beforeDay = null;
-                    messageList.clear();
-                    // Update number of messages unread to 0 => read all
-                    db.child("rooms").child(roomID).child("unread").child(myUid).setValue(0);
+            CollectionReference roomRef = firestore.collection("rooms").document(roomID).collection("messages");
+            // my chatting room information
+            roomRef.orderBy("timestamp").addSnapshotListener(new EventListener<QuerySnapshot>() {
+                        @Override
+                        public void onEvent(@Nullable QuerySnapshot value,
+                                            @Nullable FirebaseFirestoreException e) {
+                            if (e != null) {return;}
 
-                    Map<String, Object> unreadMessages = new HashMap<>();
-                    for (DataSnapshot item: dataSnapshot.getChildren()) {
-                        final ChatModel.Message message = item.getValue(ChatModel.Message.class);
-                        if (!message.readUsers.containsKey(myUid)) {
-                            message.readUsers.put(myUid, true);
-                            unreadMessages.put(item.getKey(), message);
-                        }
-                        messageList.add(message);
-                    }
+                            beforeDay = null;
+                            messageList.clear();
+                            for (final QueryDocumentSnapshot doc : value) {
+                                ChatModel.Message message = doc.toObject(ChatModel.Message.class);
+                                if (message.msg !=null & message.timestamp == null) {continue;} // FieldValue.serverTimestamp is so late
 
-                    if (unreadMessages.size()>0) {
-                        // Marks read about unread messages
-                        db.child("rooms").child(roomID).child("messages").updateChildren(unreadMessages).addOnCompleteListener(new OnCompleteListener<Void>() {
-                            @Override
-                            public void onComplete(@NonNull Task<Void> task) {
-                                notifyDataSetChanged();
-                                recyclerView.scrollToPosition(messageList.size() - 1);
+                                if (message.readUsers.indexOf(myUid) == -1) {
+                                    message.readUsers.add(myUid);
+                                    doc.getReference().update("readUsers", message.readUsers);
+                                }
+                                messageList.add(message);
                             }
-                        });
-                    } else{
-                        notifyDataSetChanged();
-                        recyclerView.scrollToPosition(messageList.size() - 1);
-                    }
-                }
-
-                @Override
-                public void onCancelled(DatabaseError databaseError) {      }
-            });
+                            notifyDataSetChanged();
+                            recyclerView.scrollToPosition(messageList.size() - 1);
+                            //setUnread2Read();
+                        }
+                    });
         }
 
         @Override
@@ -517,15 +541,22 @@ public class ChatFragment extends Fragment{
             final MessageViewHolder messageViewHolder = (MessageViewHolder) holder;
             final ChatModel.Message message = messageList.get(position);
 
-            setReadCounter(position, messageViewHolder.read_counter);
+            setReadCounter(message, messageViewHolder.read_counter);
 
-            String day = dateFormatDay.format( new Date( (long) message.timestamp) );
-            String timestamp = dateFormatHour.format( new Date( (long) message.timestamp) );
-            messageViewHolder.timestamp.setText(timestamp);
             if ("0".equals(message.msgtype)) {                                      // text message
                 messageViewHolder.msg_item.setText(message.msg);
             } else
             if ("2".equals(message.msgtype)) {                                      // file transfer
+                messageViewHolder.msg_item.setText(message.filename + "\n" + message.filesize);
+                messageViewHolder.filename = message.filename;
+                messageViewHolder.realname = message.msg;
+                File file = new File(rootPath + message.filename);
+                if(file.exists()) {
+                    messageViewHolder.button_item.setText("Open File");
+                } else {
+                    messageViewHolder.button_item.setText("Download");
+                }
+                /*
                 db.child("rooms").child(roomID).child("files").child(message.msg).addListenerForSingleValueEvent(new ValueEventListener() {
                     @Override
                     public void onDataChange(DataSnapshot dataSnapshot) {
@@ -544,7 +575,7 @@ public class ChatFragment extends Fragment{
                     @Override
                     public void onCancelled(DatabaseError databaseError) {
                     }
-                });
+                });*/
             } else {                                                                // image transfer
                 messageViewHolder.realname = message.msg;
                 Glide.with(getContext())
@@ -569,6 +600,10 @@ public class ChatFragment extends Fragment{
                 }
             }
 
+            String day = dateFormatDay.format( message.timestamp);
+            String timestamp = dateFormatHour.format( message.timestamp);
+
+            messageViewHolder.timestamp.setText(timestamp);
             messageViewHolder.divider.setVisibility(View.INVISIBLE);
             messageViewHolder.divider.getLayoutParams().height = 0;
 
@@ -586,8 +621,8 @@ public class ChatFragment extends Fragment{
             beforeDay = day;
         }
 
-        void setReadCounter (final int pos, final TextView textView) {
-            int cnt = userList.size() - messageList.get(pos).readUsers.size();
+        void setReadCounter (ChatModel.Message message, final TextView textView) {
+            int cnt = userCount - message.readUsers.size();
             if (cnt > 0) {
                 textView.setVisibility(View.VISIBLE);
                 textView.setText(String.valueOf(cnt));
@@ -703,8 +738,5 @@ public class ChatFragment extends Fragment{
     }
 
     public void backPressed() {
-        if (valueEventListener!=null) {
-            databaseReference.removeEventListener(valueEventListener);
-        }
     }
 }

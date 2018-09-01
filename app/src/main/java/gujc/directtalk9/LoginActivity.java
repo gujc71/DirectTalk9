@@ -7,22 +7,22 @@ import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 
 import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.AuthResult;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import gujc.directtalk9.common.Util9;
 import gujc.directtalk9.model.UserModel;
 
 public class LoginActivity extends AppCompatActivity {
-    private Button loginBtn;
-    private Button signupBtn;
     private EditText user_id;
     private EditText user_pw;
     SharedPreferences sharedPreferences;
@@ -34,8 +34,8 @@ public class LoginActivity extends AppCompatActivity {
 
         user_id = findViewById(R.id.user_id);
         user_pw = findViewById(R.id.user_pw);
-        loginBtn = findViewById(R.id.loginBtn);
-        signupBtn = findViewById(R.id.signupBtn);
+        Button loginBtn = findViewById(R.id.loginBtn);
+        Button signupBtn = findViewById(R.id.signupBtn);
 
         loginBtn.setOnClickListener(loginClick);
         signupBtn.setOnClickListener(signupClick);
@@ -72,25 +72,31 @@ public class LoginActivity extends AppCompatActivity {
             if (!validateForm()) return;
             final String id = user_id.getText().toString();
 
-            FirebaseAuth.getInstance().createUserWithEmailAndPassword(user_id.getText().toString(), user_pw.getText().toString()).addOnCompleteListener(new OnCompleteListener<AuthResult>() {
+            FirebaseAuth.getInstance().createUserWithEmailAndPassword(id, user_pw.getText().toString()).addOnCompleteListener(new OnCompleteListener<AuthResult>() {
                 @Override
                 public void onComplete(@NonNull Task<AuthResult> task) {
                     if (task.isSuccessful()) {
                         sharedPreferences.edit().putString("user_id", id).commit();
-                        String uid = FirebaseAuth.getInstance().getUid();
+                        final String uid = FirebaseAuth.getInstance().getUid();
+
                         UserModel userModel = new UserModel();
                         userModel.setUid(uid);
                         userModel.setUserid(id);
                         userModel.setUsernm(extractIDFromEmail(id));
                         userModel.setUsermsg("...");
-                        FirebaseDatabase.getInstance().getReference().child("users").child(uid).setValue(userModel).addOnCompleteListener(new OnCompleteListener<Void>() {
-                            @Override
-                            public void onComplete(@NonNull Task<Void> task) {
-                                Intent  intent = new Intent(LoginActivity.this, MainActivity.class);
-                                startActivity(intent);
-                                finish();
-                            }
-                        });
+
+                        FirebaseFirestore db = FirebaseFirestore.getInstance();
+                        db.collection("users").document(uid)
+                                .set(userModel)
+                                .addOnSuccessListener(new OnSuccessListener<Void>() {
+                                    @Override
+                                    public void onSuccess(Void aVoid) {
+                                        Intent  intent = new Intent(LoginActivity.this, MainActivity.class);
+                                        startActivity(intent);
+                                        finish();
+                                        Log.d(String.valueOf(R.string.app_name), "DocumentSnapshot added with ID: " + uid);
+                                    }
+                                });
                     } else {
                         Util9.showMessage(getApplicationContext(), task.getException().getMessage());
                     }

@@ -1,6 +1,5 @@
 package gujc.directtalk9.fragment;
 
-import android.app.Activity;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -26,23 +25,22 @@ import gujc.directtalk9.chat.ChatActivity;
 import gujc.directtalk9.model.ChatModel;
 import gujc.directtalk9.model.ChatRoomModel;
 import gujc.directtalk9.model.UserModel;
+
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.TreeMap;
 
 public class ChatRoomFragment extends Fragment{
 
@@ -67,96 +65,89 @@ public class ChatRoomFragment extends Fragment{
 
     // =============================================================================================
     class ChatRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
-        private List<ChatRoomModel> roomList = new ArrayList<>();
+        private List<String> roomListInx = new ArrayList<>();
+        private Map<String, ChatRoomModel> roomList = new HashMap<>();
         private Map<String, UserModel> userList = new HashMap<>();
         final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
         private String myUid;
         private StorageReference storageReference;
+        private FirebaseFirestore firestore;
 
-        public ChatRecyclerViewAdapter() {
+        ChatRecyclerViewAdapter() {
+            firestore = FirebaseFirestore.getInstance();
             storageReference  = FirebaseStorage.getInstance().getReference();
             myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
             // all users information
-            FirebaseDatabase.getInstance().getReference().child("users").addListenerForSingleValueEvent(new ValueEventListener(){
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    for (DataSnapshot item : dataSnapshot.getChildren()) {
-                        userList.put(item.getKey(), item.getValue(UserModel.class));
-                    }
-                    getRoomInfo();
-                }
-                @Override
-                public void onCancelled(DatabaseError databaseError) {}
-            });
+            firestore.collection("users")
+                    .addSnapshotListener(new EventListener<QuerySnapshot>() {
+                        @Override
+                        public void onEvent(@Nullable QuerySnapshot value,
+                                            @Nullable FirebaseFirestoreException e) {
+                            if (e != null) {return;}
+
+                            for (QueryDocumentSnapshot doc : value) {
+                                userList.put(doc.getId(), doc.toObject(UserModel.class));
+                            }
+                            getRoomInfo();
+                        }
+                    });
         }
 
+        Integer unreadTotal = 0;
         public void getRoomInfo() {
             // my chatting room information
-            FirebaseDatabase.getInstance().getReference().child("rooms").orderByChild("users/"+myUid).equalTo("i").addValueEventListener(new ValueEventListener(){
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    Integer unreadTotal = 0;
-                    TreeMap<Long, ChatRoomModel> sortRoomList = new TreeMap<Long, ChatRoomModel>(Collections.reverseOrder());
+            firestore.collection("rooms").whereGreaterThanOrEqualTo("users."+myUid, 0)
+                //.orderBy("timestamp", Query.Direction.DESCENDING)
+                .addSnapshotListener(new EventListener<QuerySnapshot>() {
+                    @Override
+                    public void onEvent(@Nullable QuerySnapshot value,
+                                        @Nullable FirebaseFirestoreException e) {
+                        if (e != null) {return;}
 
-                    for (DataSnapshot item : dataSnapshot.getChildren()) {
-                        ChatRoomModel chatRoomModel = new ChatRoomModel();
-                        chatRoomModel.setRoomID(item.getKey());
+                        for (final QueryDocumentSnapshot document : value) {
+                            ChatModel.Message message = document.toObject(ChatModel.Message.class);
+                            if (message.msg !=null & message.timestamp == null) {continue;} // FieldValue.serverTimestamp is so late
 
-                        long sortKey = 0;
-                        ChatModel.Message message = item.child("lastmessage").getValue(ChatModel.Message.class);
-                        if (message!=null) {
-                            //chatRoomModel.setLastMsg(message.msg);
-                            sortKey = (long) message.timestamp;
-                            chatRoomModel.setLastDatetime(simpleDateFormat.format(new Date(sortKey)));
-                            switch(message.msgtype){
-                                case "1": chatRoomModel.setLastMsg("Image"); break;
-                                case "2": chatRoomModel.setLastMsg("File"); break;
-                                default:  chatRoomModel.setLastMsg(message.msg);
+                            ChatRoomModel chatRoomModel = new ChatRoomModel();
+                            chatRoomModel.setRoomID(document.getId());
+                            //chatRoomModel.setUnreadCount(0);
+
+                            if (message.msg !=null) { // there are no last message
+                                chatRoomModel.setLastDatetime(simpleDateFormat.format(message.timestamp));
+                                switch(message.msgtype){
+                                    case "1": chatRoomModel.setLastMsg("Image"); break;
+                                    case "2": chatRoomModel.setLastMsg("File"); break;
+                                    default:  chatRoomModel.setLastMsg(message.msg);
+                                }
                             }
-                        }
-
-                        sortRoomList.put(sortKey, chatRoomModel);
-
-                        Map<String, Object> map = (Map<String, Object>)item.child("users").getValue();
-                        if (map.size()==2) {
-                            for (String key : map.keySet()) {
-                                if (myUid.equals(key)) continue;
-                                UserModel userModel = userList.get(key);
-                                chatRoomModel.setTitle(userModel.getUsernm());
-                                chatRoomModel.setPhoto(userModel.getUserphoto());
+                            Map<String, Long> users = (Map<String, Long>) document.get("users");
+                            chatRoomModel.setUserCount(users.size());
+                            for( String key : users.keySet() ){
+                                if (myUid.equals(key)) {
+                                    Integer  unread = (int) (long) users.get(key);
+                                    unreadTotal += unread;
+                                    chatRoomModel.setUnreadCount(unread);
+                                    break;
+                                }
                             }
-                        } else {                // group chat room
-                            String title = "";
-                            for (String key : map.keySet()) {
-                                if (myUid.equals(key)) continue;
-                                UserModel userModel = userList.get(key);
-                                title += userModel.getUsernm() + ", ";
+                            if (users.size()==2) {
+                                for( String key : users.keySet() ){
+                                    if (myUid.equals(key)) continue;
+                                    UserModel userModel = userList.get(key);
+                                    chatRoomModel.setTitle(userModel.getUsernm());
+                                    chatRoomModel.setPhoto(userModel.getUserphoto());
+                                }
+                            } else {                // group chat room
+                                chatRoomModel.setTitle(document.getString("title"));
                             }
-                            chatRoomModel.setTitle( title.substring(0, title.length() - 2) );
+
+                            roomList.put(document.getId(), chatRoomModel);
+                            roomListInx.add(document.getId());
                         }
-                        chatRoomModel.setUserCount(map.size());
-                        Integer unreadCount = item.child("unread/"+myUid).getValue(Integer.class);
-                        if (unreadCount==null)
-                             chatRoomModel.setUnreadCount(0);
-                        else {
-                            chatRoomModel.setUnreadCount(unreadCount);
-                            unreadTotal += unreadCount;
-                        }
+                        notifyDataSetChanged();
                     }
-                    roomList.clear();
-                    for(Map.Entry<Long,ChatRoomModel> entry : sortRoomList.entrySet()) {
-                        roomList.add(entry.getValue());
-                    }
-                    notifyDataSetChanged();
-                    setBadge(getContext(), unreadTotal);
-                }
-
-                @Override
-                public void onCancelled(DatabaseError databaseError) {
-
-                }
-            });
+                });
         }
 
         @NonNull
@@ -170,7 +161,7 @@ public class ChatRoomFragment extends Fragment{
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             RoomViewHolder roomViewHolder = (RoomViewHolder) holder;
 
-            final ChatRoomModel chatRoomModel = roomList.get(position);
+            final ChatRoomModel chatRoomModel = roomList.get(roomListInx.get(position));
 
             roomViewHolder.room_title.setText(chatRoomModel.getTitle());
             roomViewHolder.last_msg.setText(chatRoomModel.getLastMsg());
@@ -222,7 +213,7 @@ public class ChatRoomFragment extends Fragment{
             public TextView room_count;
             public TextView unread_count;
 
-            public RoomViewHolder(View view) {
+            RoomViewHolder(View view) {
                 super(view);
                 room_image = view.findViewById(R.id.room_image);
                 room_title = view.findViewById(R.id.room_title);
@@ -257,8 +248,7 @@ public class ChatRoomFragment extends Fragment{
         for (ResolveInfo resolveInfo : resolveInfos) {
             String pkgName = resolveInfo.activityInfo.applicationInfo.packageName;
             if (pkgName.equalsIgnoreCase(context.getPackageName())) {
-                String className = resolveInfo.activityInfo.name;
-                return className;
+                return resolveInfo.activityInfo.name;
             }
         }
         return null;

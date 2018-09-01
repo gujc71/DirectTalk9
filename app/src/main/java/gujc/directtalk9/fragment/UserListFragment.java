@@ -21,10 +21,11 @@ import gujc.directtalk9.R;
 import gujc.directtalk9.chat.ChatActivity;
 import gujc.directtalk9.model.UserModel;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.firestore.EventListener;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 
@@ -38,7 +39,7 @@ public class UserListFragment extends Fragment {
 
     @Nullable
     @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_userlist, container, false);
         RecyclerView recyclerView = view.findViewById(R.id.recyclerView);
         recyclerView.setLayoutManager( new LinearLayoutManager((inflater.getContext())));
@@ -53,29 +54,28 @@ public class UserListFragment extends Fragment {
         private StorageReference storageReference;
         final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
 
-        public UserFragmentRecyclerViewAdapter() {
+        UserFragmentRecyclerViewAdapter() {
             storageReference  = FirebaseStorage.getInstance().getReference();
             userModels = new ArrayList<>();
             final String myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
-            FirebaseDatabase.getInstance().getReference().child("users").addValueEventListener(new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    userModels.clear();
-                    for(DataSnapshot snapshot: dataSnapshot.getChildren()) {
-                        UserModel userModel = snapshot.getValue(UserModel.class);
-                        if (myUid.equals(userModel.getUid())) continue;
+            FirebaseFirestore.getInstance().collection("users")
+                    .addSnapshotListener(new EventListener<QuerySnapshot>() {
+                        @Override
+                        public void onEvent(@Nullable QuerySnapshot value,
+                                            @Nullable FirebaseFirestoreException e) {
+                            if (e != null) {return;}
+                            userModels.clear();
 
-                        userModels.add(userModel);
-                    }
-                    notifyDataSetChanged();
-                }
+                            for (QueryDocumentSnapshot doc : value) {
+                                UserModel userModel = doc.toObject(UserModel.class);
+                                if (myUid.equals(userModel.getUid())) continue;
 
-                @Override
-                public void onCancelled(DatabaseError databaseError) {
-
-                }
-            });
+                                userModels.add(userModel);
+                            }
+                            notifyDataSetChanged();
+                        }
+                    });
         }
 
         @NonNull
@@ -124,7 +124,7 @@ public class UserListFragment extends Fragment {
         public TextView user_name;
         public TextView user_msg;
 
-        public CustomViewHolder(View view) {
+        CustomViewHolder(View view) {
             super(view);
             user_photo = view.findViewById(R.id.user_photo);
             user_name = view.findViewById(R.id.user_name);

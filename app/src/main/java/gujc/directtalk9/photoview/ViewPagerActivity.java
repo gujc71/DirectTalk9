@@ -33,12 +33,13 @@ import android.widget.Button;
 
 import com.bumptech.glide.Glide;
 import com.github.chrisbanes.photoview.PhotoView;
+import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QueryDocumentSnapshot;
+import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.storage.FileDownloadTask;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
@@ -55,7 +56,7 @@ public class ViewPagerActivity extends AppCompatActivity {
 	private static String roomID;
 	private static String realname;
 	private static ViewPager viewPager;
-	private static ArrayList<String> imgList = new ArrayList<>();
+	private static ArrayList<ChatModel.Message> imgList = new ArrayList<>();
     private String rootPath = Util9.getRootPath()+"/DirectTalk9/";
 
 	@Override
@@ -98,35 +99,25 @@ public class ViewPagerActivity extends AppCompatActivity {
             if (!Util9.isPermissionGranted((Activity) view.getContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 return ;
             }
-            realname = imgList.get(viewPager.getCurrentItem());
+			ChatModel.Message message = imgList.get(viewPager.getCurrentItem());
             /// showProgressDialog("Downloading File.");
-            FirebaseDatabase.getInstance().getReference().child("rooms").child(roomID).child("files").child(realname).addListenerForSingleValueEvent(new ValueEventListener() {
-                @Override
-                public void onDataChange(DataSnapshot dataSnapshot) {
-                    ChatModel.FileInfo fileInfo = dataSnapshot.getValue(ChatModel.FileInfo.class);
 
-                    final File localFile = new File(rootPath, fileInfo.filename);
+			final File localFile = new File(rootPath, message.filename);
 
-                    FirebaseStorage.getInstance().getReference().child("files/"+realname).getFile(localFile).addOnSuccessListener(new OnSuccessListener<FileDownloadTask.TaskSnapshot>() {
-                        @Override
-                        public void onSuccess(FileDownloadTask.TaskSnapshot taskSnapshot) {
-                            // hideProgressDialog();
-                            Util9.showMessage(view.getContext(), "Downloaded file");
-                            Log.e("DirectTalk9 ","local file created " +localFile.toString());
-                        }
-                    }).addOnFailureListener(new OnFailureListener() {
-                        @Override
-                        public void onFailure(@NonNull Exception exception) {
-                            Log.e("DirectTalk9 ","local file not created  " +exception.toString());
-                        }
-                    });
-                }
-
-                @Override
-                public void onCancelled(DatabaseError databaseError) {
-                }
-            });
-
+			// realname == message.msg
+			FirebaseStorage.getInstance().getReference().child("files/"+message.msg).getFile(localFile).addOnSuccessListener(new OnSuccessListener<FileDownloadTask.TaskSnapshot>() {
+				@Override
+				public void onSuccess(FileDownloadTask.TaskSnapshot taskSnapshot) {
+					// hideProgressDialog();
+					Util9.showMessage(view.getContext(), "Downloaded file");
+					Log.e("DirectTalk9 ","local file created " +localFile.toString());
+				}
+			}).addOnFailureListener(new OnFailureListener() {
+				@Override
+				public void onFailure(@NonNull Exception exception) {
+					Log.e("DirectTalk9 ","local file not created  " +exception.toString());
+				}
+			});
 		}
 	};
 
@@ -145,27 +136,24 @@ public class ViewPagerActivity extends AppCompatActivity {
 		public SamplePagerAdapter() {
 			storageReference  = FirebaseStorage.getInstance().getReference();
 
-			FirebaseDatabase.getInstance().getReference().child("rooms").child(roomID).child("messages").addValueEventListener(new ValueEventListener(){
-				@Override
-				public void onDataChange(DataSnapshot dataSnapshot) {
-					for (DataSnapshot item: dataSnapshot.getChildren()) {
-						final ChatModel.Message message = item.getValue(ChatModel.Message.class);
-						if ("1".equals(message.msgtype)) {
-							imgList.add(message.msg);
-							if (realname.equals(message.msg)) {inx = imgList.size()-1; }
+			FirebaseFirestore.getInstance().collection("rooms").document(roomID).collection("messages").whereEqualTo("msgtype", "1")
+					.get()
+					.addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+						@Override
+						public void onComplete(@NonNull Task<QuerySnapshot> task) {
+							if (!task.isSuccessful()) { return;}
+
+							for (QueryDocumentSnapshot document : task.getResult()) {
+								ChatModel.Message message = document.toObject(ChatModel.Message.class);
+								imgList.add(message);
+								if (realname.equals(message.msg)) {inx = imgList.size()-1; }
+							}
+							notifyDataSetChanged();
+							if (inx>-1) {
+								viewPager.setCurrentItem(inx);
+							}
 						}
-					}
-					notifyDataSetChanged();
-					if (inx>-1) {
-						viewPager.setCurrentItem(inx);
-					}
-				}
-
-				@Override
-				public void onCancelled(DatabaseError databaseError) {
-
-				}
-			});
+					});
 		}
 
 		@Override

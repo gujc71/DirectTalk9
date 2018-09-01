@@ -1,5 +1,6 @@
 package gujc.directtalk9.fragment;
 
+import android.graphics.Bitmap;
 import android.support.v4.app.Fragment;
 import android.content.Intent;
 import android.net.Uri;
@@ -20,15 +21,20 @@ import gujc.directtalk9.R;
 import gujc.directtalk9.UserPWActivity;
 import gujc.directtalk9.common.Util9;
 import gujc.directtalk9.model.UserModel;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
+
+import com.bumptech.glide.request.RequestOptions;
+import com.bumptech.glide.request.target.SimpleTarget;
+import com.bumptech.glide.request.transition.Transition;
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.database.DataSnapshot;
-import com.google.firebase.database.DatabaseError;
-import com.google.firebase.database.FirebaseDatabase;
-import com.google.firebase.database.ValueEventListener;
+
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.UploadTask;
+
+import java.io.ByteArrayOutputStream;
 
 public class UserFragment extends Fragment {
     private static final int PICK_FROM_ALBUM = 1;
@@ -36,15 +42,13 @@ public class UserFragment extends Fragment {
     private EditText user_id;
     private EditText user_name;
     private EditText user_msg;
-    private Button saveBtn;
-    private Button changePWBtn;
 
     private UserModel userModel;
     private Uri userPhotoUri;
 
     @Nullable
     @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_user, container, false);
 
         user_id = view.findViewById(R.id.user_id);
@@ -54,9 +58,9 @@ public class UserFragment extends Fragment {
         user_photo = view.findViewById(R.id.user_photo);
         user_photo.setOnClickListener(userPhotoIVClickListener);
 
-        saveBtn = view.findViewById(R.id.saveBtn);
+        Button saveBtn = view.findViewById(R.id.saveBtn);
         saveBtn.setOnClickListener(saveBtnClickListener);
-        changePWBtn = view.findViewById(R.id.changePWBtn);
+        Button changePWBtn = view.findViewById(R.id.changePWBtn);
         changePWBtn.setOnClickListener(changePWBtnClickListener);
 
         getUserInfoFromServer();
@@ -65,21 +69,20 @@ public class UserFragment extends Fragment {
 
     void getUserInfoFromServer(){
         String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
-        FirebaseDatabase.getInstance().getReference().child("users").child(uid).addListenerForSingleValueEvent(new ValueEventListener() {
+
+        DocumentReference docRef = FirebaseFirestore.getInstance().collection("users").document(uid);
+        docRef.get().addOnSuccessListener(new OnSuccessListener<DocumentSnapshot>() {
             @Override
-            public void onDataChange(DataSnapshot dataSnapshot) {
-                userModel = dataSnapshot.getValue(UserModel.class);
+            public void onSuccess(DocumentSnapshot documentSnapshot) {
+                userModel = documentSnapshot.toObject(UserModel.class);
                 user_id.setText(userModel.getUserid());
                 user_name.setText(userModel.getUsernm());
                 user_msg.setText(userModel.getUsermsg());
                 if (userModel.getUserphoto()!= null && !"".equals(userModel.getUserphoto())) {
                     Glide.with(getActivity())
-                         .load(FirebaseStorage.getInstance().getReference("userPhoto/"+userModel.getUserphoto()))
-                         .into(user_photo);
+                            .load(FirebaseStorage.getInstance().getReference("userPhoto/"+userModel.getUserphoto()))
+                            .into(user_photo);
                 }
-            }
-            @Override
-            public void onCancelled(DatabaseError databaseError) {
             }
         });
     }
@@ -107,35 +110,44 @@ public class UserFragment extends Fragment {
             userModel.setUsermsg(user_msg.getText().toString());
 
             final String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
+            final FirebaseFirestore db = FirebaseFirestore.getInstance();
 
-            if (userPhotoUri==null) {
-                FirebaseDatabase.getInstance().getReference().child("users").child(uid).setValue(userModel).addOnCompleteListener(new OnCompleteListener<Void>() {
-                    @Override
-                    public void onComplete(@NonNull Task<Void> task) {
-                        Util9.showMessage(getActivity(), "Success to Save.");
-                    }
-                });
-            } else {
-                FirebaseStorage.getInstance().getReference().child("userPhoto").child(uid).putFile(userPhotoUri).addOnCompleteListener(new OnCompleteListener<UploadTask.TaskSnapshot>() {
-                    @Override
-                    public void onComplete(@NonNull Task<UploadTask.TaskSnapshot> task) {
-                        userModel.setUserphoto( uid );
-                        FirebaseDatabase.getInstance().getReference().child("users").child(uid).setValue(userModel).addOnCompleteListener(new OnCompleteListener<Void>() {
-                            @Override
-                            public void onComplete(@NonNull Task<Void> task) {
-                                Util9.showMessage(getActivity(), "Success to Save.");
-                            }
-                        });
-                    }
-                });
+            if (userPhotoUri!=null) {
+                userModel.setUserphoto( uid );
             }
+
+            db.collection("users").document(uid)
+                    .set(userModel)
+                    .addOnSuccessListener(new OnSuccessListener<Void>() {
+                        @Override
+                        public void onSuccess(Void aVoid) {
+                            if (userPhotoUri==null) {
+                                Util9.showMessage(getActivity(), "Success to Save.");
+                            } else {
+                                // small image
+                                Glide.with(getContext())
+                                        .asBitmap()
+                                        .load(userPhotoUri)
+                                        .apply(new RequestOptions().override(150, 150))
+                                        .into(new SimpleTarget<Bitmap>() {
+                                            @Override
+                                            public void onResourceReady(Bitmap bitmap, Transition<? super Bitmap> transition) {
+                                                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                                                bitmap.compress(Bitmap.CompressFormat.JPEG, 100, baos);
+                                                byte[] data = baos.toByteArray();
+                                                FirebaseStorage.getInstance().getReference().child("userPhoto/" + uid).putBytes(data);
+                                                Util9.showMessage(getActivity(), "Success to Save.");
+                                            }
+                                        });
+                            }
+                        }
+                    });
         }
     };
 
     Button.OnClickListener changePWBtnClickListener = new View.OnClickListener() {
         public void onClick(final View view) {
-        //getFragmentManager().beginTransaction().replace(R.id.container, new UserPWFragment()).commit();
-        startActivity(new Intent(getActivity(), UserPWActivity.class));
+            startActivity(new Intent(getActivity(), UserPWActivity.class));
         }
     };
 
