@@ -4,13 +4,13 @@ This app is suitable for enterprise messenger where all users appears because th
 
 ![Screenshot](./Screenshot.png)
 
+### BRANCHES ###
+- master: Cloud Firestore
+- realtime: Realtime Database
+
 ### FEATURES ###
 - 1:1 and Group chat
 - Text, Image, File transfer
-
-### FUTURE ###
-- Realtime Database to Cloud Firestore
-- add / delete / find friends
 
 ### INSTALLATION ###
 1. Clone this source from github (in android studio).
