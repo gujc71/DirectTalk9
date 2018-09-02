@@ -167,7 +167,7 @@ public class ViewPagerActivity extends AppCompatActivity {
             photoView.setId(R.id.photoView);
 
 			Glide.with(container.getContext())
-					.load(storageReference.child("filesmall/"+imgList.get(position)))
+					.load(storageReference.child("filesmall/"+imgList.get(position).msg))
 					.into(photoView);
 
 			container.addView(photoView, LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);

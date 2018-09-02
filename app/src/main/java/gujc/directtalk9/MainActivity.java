@@ -104,7 +104,7 @@ public class MainActivity extends AppCompatActivity {
         String token = FirebaseInstanceId.getInstance().getToken();
         Map<String, Object> map = new HashMap<>();
         map.put("token", token);
-        FirebaseFirestore.getInstance().collection("users").document("uid").set(map, SetOptions.merge());
+        FirebaseFirestore.getInstance().collection("users").document(uid).set(map, SetOptions.merge());
     }
 
     @Override
