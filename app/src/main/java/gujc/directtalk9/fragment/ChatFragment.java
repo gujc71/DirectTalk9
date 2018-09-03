@@ -43,12 +43,14 @@ import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.CollectionReference;
+import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.EventListener;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.firestore.SetOptions;
@@ -89,11 +91,12 @@ public class ChatFragment extends Fragment{
 
     private static final int PICK_FROM_ALBUM = 1;
     private static final int PICK_FROM_FILE = 2;
+    private static String rootPath = Util9.getRootPath()+"/DirectTalk9/";
 
     private Button sendBtn;
     private EditText msg_input;
     private RecyclerView recyclerView;
-
+    private RecyclerViewAdapter mAdapter;
     private SimpleDateFormat dateFormatDay = new SimpleDateFormat("yyyy-MM-dd");
     private SimpleDateFormat dateFormatHour = new SimpleDateFormat("aa hh:mm");
     private String roomID;
@@ -101,8 +104,7 @@ public class ChatFragment extends Fragment{
     private String toUid;
     private Map<String, UserModel> userList = new HashMap<>();
 
-    //private DatabaseReference databaseReference;
-    //private ValueEventListener valueEventListener;
+    private ListenerRegistration listenerRegistration;
     private FirebaseFirestore firestore=null;
     private StorageReference storageReference;
 
@@ -127,6 +129,8 @@ public class ChatFragment extends Fragment{
         View view = inflater.inflate(R.layout.fragment_chat, container, false);
 
         recyclerView = view.findViewById(R.id.recyclerView);
+        recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+
         msg_input = view.findViewById(R.id.msg_input);
         sendBtn = view.findViewById(R.id.sendBtn);
         sendBtn.setOnClickListener(sendBtnClickListener);
@@ -175,6 +179,14 @@ public class ChatFragment extends Fragment{
         return view;
     }
 
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        if (mAdapter != null) {
+            mAdapter.stopListening();
+        }
+    }
+
     // get a user info
     void getUserInfoFromServer(String id){
         firestore.collection("users").document(id).get().addOnSuccessListener(new OnSuccessListener<DocumentSnapshot>() {
@@ -182,9 +194,9 @@ public class ChatFragment extends Fragment{
             public void onSuccess(DocumentSnapshot documentSnapshot) {
                 UserModel userModel = documentSnapshot.toObject(UserModel.class);
                 userList.put(userModel.getUid(), userModel);
-                if (userCount == userList.size()) {
-                    recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-                    recyclerView.setAdapter(new RecyclerViewAdapter());
+                if (roomID != null & userCount == userList.size()) {
+                    mAdapter = new RecyclerViewAdapter();
+                    recyclerView.setAdapter(mAdapter);
                 }
             }
         });
@@ -228,7 +240,10 @@ public class ChatFragment extends Fragment{
             }
         });
     }
+
     void setUnread2Read() {
+        if (roomID==null) return;
+
         firestore.collection("rooms").document(roomID).get().addOnCompleteListener(new OnCompleteListener<DocumentSnapshot>() {
             @Override
             public void onComplete(@NonNull Task<DocumentSnapshot> task) {
@@ -241,6 +256,7 @@ public class ChatFragment extends Fragment{
             }
         });
     }
+
     public void CreateChattingRoom(final DocumentReference room) {
         Map<String, Integer> users = new HashMap<>();
         String title = "";
@@ -255,8 +271,8 @@ public class ChatFragment extends Fragment{
             @Override
             public void onComplete(@NonNull Task<Void> task) {
                 if (task.isSuccessful()) {
-                    recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-                    recyclerView.setAdapter(new RecyclerViewAdapter());
+                    mAdapter = new RecyclerViewAdapter();
+                    recyclerView.setAdapter(mAdapter);
                 }
             }
         });
@@ -316,12 +332,6 @@ public class ChatFragment extends Fragment{
                     if (!myUid.equals(key)) users.put(key, users.get(key)+1);
                 }
                 document.getReference().update("users", users);
-
-                //final Map<String,Object> files = new HashMap<>();
-                //files.put(msg, fileinfo);
-
-//                batch.set(docRef.collection("files").document(msg), fileinfo);
-                //db.child("rooms").child(roomID).child("files").child(filename).setValue(fileinfo);    // save file information
 
                 batch.commit().addOnCompleteListener(new OnCompleteListener<Void>() {
                     @Override
@@ -471,44 +481,70 @@ public class ChatFragment extends Fragment{
         List<ChatModel.Message> messageList;
         String beforeDay = null;
         MessageViewHolder beforeViewHolder;
-        String rootPath = Util9.getRootPath()+"/DirectTalk9/";
 
         RecyclerViewAdapter() {
             File dir = new File(rootPath);
             if (!dir.exists()) {
                 if (!Util9.isPermissionGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                    return ;
+                    return;
                 }
                 dir.mkdirs();
             }
 
             messageList = new ArrayList<>();
+            setUnread2Read();
+            startListening();
+        }
+
+        public void startListening() {
+            beforeDay = null;
+            messageList.clear();
 
             CollectionReference roomRef = firestore.collection("rooms").document(roomID).collection("messages");
             // my chatting room information
-            roomRef.orderBy("timestamp").addSnapshotListener(new EventListener<QuerySnapshot>() {
+            listenerRegistration = roomRef.orderBy("timestamp").addSnapshotListener(new EventListener<QuerySnapshot>() {
                         @Override
-                        public void onEvent(@Nullable QuerySnapshot value,
-                                            @Nullable FirebaseFirestoreException e) {
+                        public void onEvent(@Nullable QuerySnapshot documentSnapshots, @Nullable FirebaseFirestoreException e) {
                             if (e != null) {return;}
 
-                            beforeDay = null;
-                            messageList.clear();
-                            for (final QueryDocumentSnapshot doc : value) {
-                                ChatModel.Message message = doc.toObject(ChatModel.Message.class);
-                                if (message.msg !=null & message.timestamp == null) {continue;} // FieldValue.serverTimestamp is so late
+                            ChatModel.Message message;
+                            for (DocumentChange change : documentSnapshots.getDocumentChanges()) {
+                                switch (change.getType()) {
+                                    case ADDED:
+                                        message = change.getDocument().toObject(ChatModel.Message.class);
+                                        //if (message.msg !=null & message.timestamp == null) {continue;} // FieldValue.serverTimestamp is so late
 
-                                if (message.readUsers.indexOf(myUid) == -1) {
-                                    message.readUsers.add(myUid);
-                                    doc.getReference().update("readUsers", message.readUsers);
+                                        if (message.readUsers.indexOf(myUid) == -1) {
+                                            message.readUsers.add(myUid);
+                                            change.getDocument().getReference().update("readUsers", message.readUsers);
+                                        }
+                                        messageList.add(message);
+                                        notifyItemInserted(change.getNewIndex());
+                                        break;
+                                    case MODIFIED:
+                                        message = change.getDocument().toObject(ChatModel.Message.class);
+                                        messageList.set(change.getOldIndex(), message);
+                                        notifyItemChanged(change.getOldIndex());
+                                        break;
+                                    case REMOVED:
+                                        messageList.remove(change.getOldIndex());
+                                        notifyItemRemoved(change.getOldIndex());
+                                        break;
                                 }
-                                messageList.add(message);
                             }
-                            notifyDataSetChanged();
                             recyclerView.scrollToPosition(messageList.size() - 1);
-                            //setUnread2Read();
                         }
                     });
+        }
+
+        public void stopListening() {
+            if (listenerRegistration != null) {
+                listenerRegistration.remove();
+                listenerRegistration = null;
+            }
+
+            messageList.clear();
+            notifyDataSetChanged();
         }
 
         @Override
@@ -556,26 +592,6 @@ public class ChatFragment extends Fragment{
                 } else {
                     messageViewHolder.button_item.setText("Download");
                 }
-                /*
-                db.child("rooms").child(roomID).child("files").child(message.msg).addListenerForSingleValueEvent(new ValueEventListener() {
-                    @Override
-                    public void onDataChange(DataSnapshot dataSnapshot) {
-                        ChatModel.FileInfo fileInfo = dataSnapshot.getValue(ChatModel.FileInfo.class);
-                        messageViewHolder.msg_item.setText(fileInfo.filename + "\n" + fileInfo.filesize);
-                        messageViewHolder.filename = fileInfo.filename;
-                        messageViewHolder.realname = message.msg;
-                        File file = new File(rootPath + fileInfo.filename);
-                        if(file.exists()) {
-                            messageViewHolder.button_item.setText("Open File");
-                        } else {
-                            messageViewHolder.button_item.setText("Download");
-                        }
-                    }
-
-                    @Override
-                    public void onCancelled(DatabaseError databaseError) {
-                    }
-                });*/
             } else {                                                                // image transfer
                 messageViewHolder.realname = message.msg;
                 Glide.with(getContext())
@@ -600,12 +616,15 @@ public class ChatFragment extends Fragment{
                 }
             }
 
+            messageViewHolder.divider.setVisibility(View.INVISIBLE);
+            messageViewHolder.divider.getLayoutParams().height = 0;
+            messageViewHolder.timestamp.setText("");
+            if (message.timestamp==null) {return;}
+
             String day = dateFormatDay.format( message.timestamp);
             String timestamp = dateFormatHour.format( message.timestamp);
 
             messageViewHolder.timestamp.setText(timestamp);
-            messageViewHolder.divider.setVisibility(View.INVISIBLE);
-            messageViewHolder.divider.getLayoutParams().height = 0;
 
             if (position==0) {
                 messageViewHolder.divider_date.setText(day);
@@ -636,105 +655,107 @@ public class ChatFragment extends Fragment{
             return messageList.size();
         }
 
-        private class MessageViewHolder extends RecyclerView.ViewHolder {
-            public ImageView user_photo;
-            public TextView msg_item;
-            public ImageView img_item;          // only item_chatimage_
-            public TextView msg_name;
-            public TextView timestamp;
-            public TextView read_counter;
-            public LinearLayout divider;
-            public TextView divider_date;
-            public TextView button_item;            // only item_chatfile_
-            public LinearLayout msgLine_item;       // only item_chatfile_
-            public String filename;
-            public String realname;
 
-            public MessageViewHolder(View view) {
-                super(view);
-                user_photo = view.findViewById(R.id.user_photo);
-                msg_item = view.findViewById(R.id.msg_item);
-                img_item = view.findViewById(R.id.img_item);
-                timestamp = view.findViewById(R.id.timestamp);
-                msg_name = view.findViewById(R.id.msg_name);
-                read_counter = view.findViewById(R.id.read_counter);
-                divider = view.findViewById(R.id.divider);
-                divider_date = view.findViewById(R.id.divider_date);
-                button_item = view.findViewById(R.id.button_item);
-                msgLine_item = view.findViewById(R.id.msgLine_item);        // for file
-                if (msgLine_item!=null) {
-                    msgLine_item.setOnClickListener(downloadClickListener);
-                }
-                if (img_item!=null) {                                       // for image
-                    img_item.setOnClickListener(imageClickListener);
+    }
+
+    private class MessageViewHolder extends RecyclerView.ViewHolder {
+        public ImageView user_photo;
+        public TextView msg_item;
+        public ImageView img_item;          // only item_chatimage_
+        public TextView msg_name;
+        public TextView timestamp;
+        public TextView read_counter;
+        public LinearLayout divider;
+        public TextView divider_date;
+        public TextView button_item;            // only item_chatfile_
+        public LinearLayout msgLine_item;       // only item_chatfile_
+        public String filename;
+        public String realname;
+
+        public MessageViewHolder(View view) {
+            super(view);
+            user_photo = view.findViewById(R.id.user_photo);
+            msg_item = view.findViewById(R.id.msg_item);
+            img_item = view.findViewById(R.id.img_item);
+            timestamp = view.findViewById(R.id.timestamp);
+            msg_name = view.findViewById(R.id.msg_name);
+            read_counter = view.findViewById(R.id.read_counter);
+            divider = view.findViewById(R.id.divider);
+            divider_date = view.findViewById(R.id.divider_date);
+            button_item = view.findViewById(R.id.button_item);
+            msgLine_item = view.findViewById(R.id.msgLine_item);        // for file
+            if (msgLine_item!=null) {
+                msgLine_item.setOnClickListener(downloadClickListener);
+            }
+            if (img_item!=null) {                                       // for image
+                img_item.setOnClickListener(imageClickListener);
+            }
+        }
+        // file download and open
+        Button.OnClickListener downloadClickListener = new View.OnClickListener() {
+            public void onClick(View view) {
+                if ("Download".equals(button_item.getText())) {
+                    download();
+                } else {
+                    openWith();
                 }
             }
-            // file download and open
-            Button.OnClickListener downloadClickListener = new View.OnClickListener() {
-                public void onClick(View view) {
-                    if ("Download".equals(button_item.getText())) {
-                        download();
-                    } else {
-                        openWith();
+            public void download() {
+                if (!Util9.isPermissionGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                    return ;
+                }
+                showProgressDialog("Downloading File.");
+
+                final File localFile = new File(rootPath, filename);
+
+                storageReference.child("files/"+realname).getFile(localFile).addOnSuccessListener(new OnSuccessListener<FileDownloadTask.TaskSnapshot>() {
+                    @Override
+                    public void onSuccess(FileDownloadTask.TaskSnapshot taskSnapshot) {
+                        button_item.setText("Open File");
+                        hideProgressDialog();
+                        Log.e("DirectTalk9 ","local file created " +localFile.toString());
                     }
-                }
-                public void download() {
-                    if (!Util9.isPermissionGranted(getActivity(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                        return ;
+                }).addOnFailureListener(new OnFailureListener() {
+                    @Override
+                    public void onFailure(@NonNull Exception exception) {
+                        Log.e("DirectTalk9 ","local file not created  " +exception.toString());
                     }
-                    showProgressDialog("Downloading File.");
+                });
+            }
 
-                    final File localFile = new File(rootPath, filename);
+            public void openWith() {
+                File newFile = new File(rootPath + filename);
+                MimeTypeMap mime = MimeTypeMap.getSingleton();
+                String ext = newFile.getName().substring(newFile.getName().lastIndexOf(".") + 1);
+                String type = mime.getMimeTypeFromExtension(ext);
 
-                    storageReference.child("files/"+realname).getFile(localFile).addOnSuccessListener(new OnSuccessListener<FileDownloadTask.TaskSnapshot>() {
-                        @Override
-                        public void onSuccess(FileDownloadTask.TaskSnapshot taskSnapshot) {
-                            button_item.setText("Open File");
-                            hideProgressDialog();
-                            Log.e("DirectTalk9 ","local file created " +localFile.toString());
-                        }
-                    }).addOnFailureListener(new OnFailureListener() {
-                        @Override
-                        public void onFailure(@NonNull Exception exception) {
-                            Log.e("DirectTalk9 ","local file not created  " +exception.toString());
-                        }
-                    });
-                }
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                Uri uri;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    uri = FileProvider.getUriForFile(getContext(), getActivity().getPackageName() + ".provider", newFile);
 
-                public void openWith() {
-                    File newFile = new File(rootPath + filename);
-                    MimeTypeMap mime = MimeTypeMap.getSingleton();
-                    String ext = newFile.getName().substring(newFile.getName().lastIndexOf(".") + 1);
-                    String type = mime.getMimeTypeFromExtension(ext);
-
-                    Intent intent = new Intent(Intent.ACTION_VIEW);
-                    Uri uri;
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                        uri = FileProvider.getUriForFile(getContext(), getActivity().getPackageName() + ".provider", newFile);
-
-                        List<ResolveInfo> resInfoList = getActivity().getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
-                        for (ResolveInfo resolveInfo : resInfoList) {
-                            String packageName = resolveInfo.activityInfo.packageName;
-                            getActivity().grantUriPermission(packageName, uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        }
-                    }else {
-                        uri = Uri.fromFile(newFile);
+                    List<ResolveInfo> resInfoList = getActivity().getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY);
+                    for (ResolveInfo resolveInfo : resInfoList) {
+                        String packageName = resolveInfo.activityInfo.packageName;
+                        getActivity().grantUriPermission(packageName, uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     }
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    intent.setDataAndType(uri, type);//"application/vnd.android.package-archive");
-                    startActivity(Intent.createChooser(intent, "Your title"));
+                }else {
+                    uri = Uri.fromFile(newFile);
                 }
-            };
-            // photo view
-            Button.OnClickListener imageClickListener = new View.OnClickListener() {
-                public void onClick(View view) {
-                    Intent intent = new Intent(getContext(), ViewPagerActivity.class);
-                    intent.putExtra("roomID", roomID);
-                    intent.putExtra("realname", realname);
-                    startActivity(intent);
-                }
-            };
-        }
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.setDataAndType(uri, type);//"application/vnd.android.package-archive");
+                startActivity(Intent.createChooser(intent, "Your title"));
+            }
+        };
+        // photo view
+        Button.OnClickListener imageClickListener = new View.OnClickListener() {
+            public void onClick(View view) {
+                Intent intent = new Intent(getContext(), ViewPagerActivity.class);
+                intent.putExtra("roomID", roomID);
+                intent.putExtra("realname", realname);
+                startActivity(intent);
+            }
+        };
     }
 
     public void backPressed() {
