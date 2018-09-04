@@ -1,5 +1,5 @@
 # DirectTalk9 #
-This is a native Android (Firebase - Realtime Database ) Messenger app, with real time chat conversations.
+This is a messenger app for Android based on Firebase (Cloud Firestore and Realtime Database) for live chat.
 
 This app is suitable for enterprise messenger where all users appears because there is no management function such as add / delete / find friends.
 
