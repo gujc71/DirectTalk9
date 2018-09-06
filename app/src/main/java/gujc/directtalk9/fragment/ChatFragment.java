@@ -74,6 +74,7 @@ import java.util.TimeZone;
 import gujc.directtalk9.R;
 import gujc.directtalk9.common.Util9;
 import gujc.directtalk9.model.ChatModel;
+import gujc.directtalk9.model.Message;
 import gujc.directtalk9.model.NotificationModel;
 import gujc.directtalk9.model.UserModel;
 import gujc.directtalk9.photoview.ViewPagerActivity;
@@ -478,7 +479,7 @@ public class ChatFragment extends Fragment{
     class RecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
         final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
 
-        List<ChatModel.Message> messageList;
+        List<Message> messageList;
         String beforeDay = null;
         MessageViewHolder beforeViewHolder;
 
@@ -491,7 +492,7 @@ public class ChatFragment extends Fragment{
                 dir.mkdirs();
             }
 
-            messageList = new ArrayList<>();
+            messageList = new ArrayList<Message>();
             setUnread2Read();
             startListening();
         }
@@ -503,38 +504,38 @@ public class ChatFragment extends Fragment{
             CollectionReference roomRef = firestore.collection("rooms").document(roomID).collection("messages");
             // my chatting room information
             listenerRegistration = roomRef.orderBy("timestamp").addSnapshotListener(new EventListener<QuerySnapshot>() {
-                        @Override
-                        public void onEvent(@Nullable QuerySnapshot documentSnapshots, @Nullable FirebaseFirestoreException e) {
-                            if (e != null) {return;}
+                @Override
+                public void onEvent(@Nullable QuerySnapshot documentSnapshots, @Nullable FirebaseFirestoreException e) {
+                    if (e != null) {return;}
 
-                            ChatModel.Message message;
-                            for (DocumentChange change : documentSnapshots.getDocumentChanges()) {
-                                switch (change.getType()) {
-                                    case ADDED:
-                                        message = change.getDocument().toObject(ChatModel.Message.class);
-                                        //if (message.msg !=null & message.timestamp == null) {continue;} // FieldValue.serverTimestamp is so late
+                    Message message;
+                    for (DocumentChange change : documentSnapshots.getDocumentChanges()) {
+                        switch (change.getType()) {
+                            case ADDED:
+                                message = change.getDocument().toObject(Message.class);
+                                //if (message.msg !=null & message.timestamp == null) {continue;} // FieldValue.serverTimestamp is so late
 
-                                        if (message.readUsers.indexOf(myUid) == -1) {
-                                            message.readUsers.add(myUid);
-                                            change.getDocument().getReference().update("readUsers", message.readUsers);
-                                        }
-                                        messageList.add(message);
-                                        notifyItemInserted(change.getNewIndex());
-                                        break;
-                                    case MODIFIED:
-                                        message = change.getDocument().toObject(ChatModel.Message.class);
-                                        messageList.set(change.getOldIndex(), message);
-                                        notifyItemChanged(change.getOldIndex());
-                                        break;
-                                    case REMOVED:
-                                        messageList.remove(change.getOldIndex());
-                                        notifyItemRemoved(change.getOldIndex());
-                                        break;
+                                if (message.getReadUsers().indexOf(myUid) == -1) {
+                                    message.getReadUsers().add(myUid);
+                                    change.getDocument().getReference().update("readUsers", message.getReadUsers());
                                 }
-                            }
-                            recyclerView.scrollToPosition(messageList.size() - 1);
+                                messageList.add(message);
+                                notifyItemInserted(change.getNewIndex());
+                                break;
+                            case MODIFIED:
+                                message = change.getDocument().toObject(Message.class);
+                                messageList.set(change.getOldIndex(), message);
+                                notifyItemChanged(change.getOldIndex());
+                                break;
+                            case REMOVED:
+                                messageList.remove(change.getOldIndex());
+                                notifyItemRemoved(change.getOldIndex());
+                                break;
                         }
-                    });
+                    }
+                    recyclerView.scrollToPosition(messageList.size() - 1);
+                }
+            });
         }
 
         public void stopListening() {
@@ -549,15 +550,15 @@ public class ChatFragment extends Fragment{
 
         @Override
         public int getItemViewType(int position) {
-            ChatModel.Message message = messageList.get(position);
-            if (myUid.equals(message.uid) ) {
-                switch(message.msgtype){
+            Message message = messageList.get(position);
+            if (myUid.equals(message.getUid()) ) {
+                switch(message.getMsgtype()){
                     case "1": return R.layout.item_chatimage_right;
                     case "2": return R.layout.item_chatfile_right;
                     default:  return R.layout.item_chatmsg_right;
                 }
             } else {
-                switch(message.msgtype){
+                switch(message.getMsgtype()){
                     case "1": return R.layout.item_chatimage_left;
                     case "2": return R.layout.item_chatfile_left;
                     default:  return R.layout.item_chatmsg_left;
@@ -575,33 +576,33 @@ public class ChatFragment extends Fragment{
         @Override
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             final MessageViewHolder messageViewHolder = (MessageViewHolder) holder;
-            final ChatModel.Message message = messageList.get(position);
+            final Message message = messageList.get(position);
 
             setReadCounter(message, messageViewHolder.read_counter);
 
-            if ("0".equals(message.msgtype)) {                                      // text message
-                messageViewHolder.msg_item.setText(message.msg);
+            if ("0".equals(message.getMsgtype())) {                                      // text message
+                messageViewHolder.msg_item.setText(message.getMsg());
             } else
-            if ("2".equals(message.msgtype)) {                                      // file transfer
-                messageViewHolder.msg_item.setText(message.filename + "\n" + message.filesize);
-                messageViewHolder.filename = message.filename;
-                messageViewHolder.realname = message.msg;
-                File file = new File(rootPath + message.filename);
+            if ("2".equals(message.getMsgtype())) {                                      // file transfer
+                messageViewHolder.msg_item.setText(message.getFilename() + "\n" + message.getFilesize());
+                messageViewHolder.filename = message.getFilename();
+                messageViewHolder.realname = message.getMsg();
+                File file = new File(rootPath + message.getFilename());
                 if(file.exists()) {
                     messageViewHolder.button_item.setText("Open File");
                 } else {
                     messageViewHolder.button_item.setText("Download");
                 }
             } else {                                                                // image transfer
-                messageViewHolder.realname = message.msg;
+                messageViewHolder.realname = message.getMsg();
                 Glide.with(getContext())
-                        .load(storageReference.child("filesmall/"+message.msg))
+                        .load(storageReference.child("filesmall/"+message.getMsg()))
                         .apply(new RequestOptions().override(1000, 1000))
                         .into(messageViewHolder.img_item);
             }
 
-            if (! myUid.equals(message.uid)) {
-                UserModel userModel = userList.get(message.uid);
+            if (! myUid.equals(message.getUid())) {
+                UserModel userModel = userList.get(message.getUid());
                 messageViewHolder.msg_name.setText(userModel.getUsernm());
 
                 if (userModel.getUserphoto()==null) {
@@ -619,10 +620,10 @@ public class ChatFragment extends Fragment{
             messageViewHolder.divider.setVisibility(View.INVISIBLE);
             messageViewHolder.divider.getLayoutParams().height = 0;
             messageViewHolder.timestamp.setText("");
-            if (message.timestamp==null) {return;}
+            if (message.getTimestamp()==null) {return;}
 
-            String day = dateFormatDay.format( message.timestamp);
-            String timestamp = dateFormatHour.format( message.timestamp);
+            String day = dateFormatDay.format( message.getTimestamp());
+            String timestamp = dateFormatHour.format( message.getTimestamp());
 
             messageViewHolder.timestamp.setText(timestamp);
 
@@ -640,8 +641,8 @@ public class ChatFragment extends Fragment{
             beforeDay = day;
         }
 
-        void setReadCounter (ChatModel.Message message, final TextView textView) {
-            int cnt = userCount - message.readUsers.size();
+        void setReadCounter (Message message, final TextView textView) {
+            int cnt = userCount - message.getReadUsers().size();
             if (cnt > 0) {
                 textView.setVisibility(View.VISIBLE);
                 textView.setText(String.valueOf(cnt));

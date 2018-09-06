@@ -49,14 +49,14 @@ import java.util.ArrayList;
 
 import gujc.directtalk9.R;
 import gujc.directtalk9.common.Util9;
-import gujc.directtalk9.model.ChatModel;
+import gujc.directtalk9.model.Message;
 
 public class ViewPagerActivity extends AppCompatActivity {
 
 	private static String roomID;
 	private static String realname;
 	private static ViewPager viewPager;
-	private static ArrayList<ChatModel.Message> imgList = new ArrayList<>();
+	private static ArrayList<Message> imgList = new ArrayList<>();
     private String rootPath = Util9.getRootPath()+"/DirectTalk9/";
 
 	@Override
@@ -99,13 +99,13 @@ public class ViewPagerActivity extends AppCompatActivity {
             if (!Util9.isPermissionGranted((Activity) view.getContext(), Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 return ;
             }
-			ChatModel.Message message = imgList.get(viewPager.getCurrentItem());
+			Message message = imgList.get(viewPager.getCurrentItem());
             /// showProgressDialog("Downloading File.");
 
-			final File localFile = new File(rootPath, message.filename);
+			final File localFile = new File(rootPath, message.getFilename());
 
 			// realname == message.msg
-			FirebaseStorage.getInstance().getReference().child("files/"+message.msg).getFile(localFile).addOnSuccessListener(new OnSuccessListener<FileDownloadTask.TaskSnapshot>() {
+			FirebaseStorage.getInstance().getReference().child("files/"+message.getMsg()).getFile(localFile).addOnSuccessListener(new OnSuccessListener<FileDownloadTask.TaskSnapshot>() {
 				@Override
 				public void onSuccess(FileDownloadTask.TaskSnapshot taskSnapshot) {
 					// hideProgressDialog();
@@ -144,9 +144,9 @@ public class ViewPagerActivity extends AppCompatActivity {
 							if (!task.isSuccessful()) { return;}
 
 							for (QueryDocumentSnapshot document : task.getResult()) {
-								ChatModel.Message message = document.toObject(ChatModel.Message.class);
+								Message message = document.toObject(Message.class);
 								imgList.add(message);
-								if (realname.equals(message.msg)) {inx = imgList.size()-1; }
+								if (realname.equals(message.getMsg())) {inx = imgList.size()-1; }
 							}
 							notifyDataSetChanged();
 							if (inx>-1) {
@@ -167,7 +167,7 @@ public class ViewPagerActivity extends AppCompatActivity {
             photoView.setId(R.id.photoView);
 
 			Glide.with(container.getContext())
-					.load(storageReference.child("filesmall/"+imgList.get(position).msg))
+					.load(storageReference.child("filesmall/"+imgList.get(position).getMsg()))
 					.into(photoView);
 
 			container.addView(photoView, LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);

@@ -24,12 +24,14 @@ import gujc.directtalk9.R;
 import gujc.directtalk9.chat.ChatActivity;
 import gujc.directtalk9.model.ChatModel;
 import gujc.directtalk9.model.ChatRoomModel;
+import gujc.directtalk9.model.Message;
 import gujc.directtalk9.model.UserModel;
 
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.EventListener;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.ListenerRegistration;
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.storage.FirebaseStorage;
@@ -37,14 +39,18 @@ import com.google.firebase.storage.StorageReference;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.TreeMap;
 
 public class ChatRoomFragment extends Fragment{
 
     private SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    private RecyclerViewAdapter mAdapter;
 
     public ChatRoomFragment() {
     }
@@ -55,31 +61,40 @@ public class ChatRoomFragment extends Fragment{
         View view = inflater.inflate(R.layout.fragment_chatroom, container, false);
 
         RecyclerView recyclerView = view.findViewById(R.id.recyclerView);
-        recyclerView.setAdapter(new ChatRecyclerViewAdapter());
         recyclerView.setLayoutManager(new LinearLayoutManager(inflater.getContext()));
+        mAdapter = new RecyclerViewAdapter();
+        recyclerView.setAdapter(mAdapter);
 
         simpleDateFormat.setTimeZone(TimeZone.getTimeZone("Asia/Seoul"));
 
         return view;
     }
 
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        if (mAdapter != null) {
+            mAdapter.stopListening();
+        }
+    }
     // =============================================================================================
-    class ChatRecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
-        private List<String> roomListInx = new ArrayList<>();
-        private Map<String, ChatRoomModel> roomList = new HashMap<>();
-        private Map<String, UserModel> userList = new HashMap<>();
+    class RecyclerViewAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder>{
         final private RequestOptions requestOptions = new RequestOptions().transforms(new CenterCrop(), new RoundedCorners(90));
+        private List<ChatRoomModel> roomList = new ArrayList<>();
+        private Map<String, UserModel> userList = new HashMap<>();
         private String myUid;
         private StorageReference storageReference;
         private FirebaseFirestore firestore;
+        private ListenerRegistration listenerRegistration;
+        private ListenerRegistration listenerUsers;
 
-        ChatRecyclerViewAdapter() {
+        RecyclerViewAdapter() {
             firestore = FirebaseFirestore.getInstance();
             storageReference  = FirebaseStorage.getInstance().getReference();
             myUid = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
             // all users information
-            firestore.collection("users")
+            listenerUsers = firestore.collection("users")
                     .addSnapshotListener(new EventListener<QuerySnapshot>() {
                         @Override
                         public void onEvent(@Nullable QuerySnapshot value,
@@ -97,57 +112,76 @@ public class ChatRoomFragment extends Fragment{
         Integer unreadTotal = 0;
         public void getRoomInfo() {
             // my chatting room information
-            firestore.collection("rooms").whereGreaterThanOrEqualTo("users."+myUid, 0)
-                //.orderBy("timestamp", Query.Direction.DESCENDING)
-                .addSnapshotListener(new EventListener<QuerySnapshot>() {
-                    @Override
-                    public void onEvent(@Nullable QuerySnapshot value,
-                                        @Nullable FirebaseFirestoreException e) {
-                        if (e != null) {return;}
+            listenerRegistration = firestore.collection("rooms").whereGreaterThanOrEqualTo("users."+myUid, 0)
+//                    a.orderBy("timestamp", Query.Direction.DESCENDING)
+                    .addSnapshotListener(new EventListener<QuerySnapshot>() {
+                        @Override
+                        public void onEvent(@Nullable QuerySnapshot value,
+                                            @Nullable FirebaseFirestoreException e) {
+                            if (e != null) {return;}
 
-                        for (final QueryDocumentSnapshot document : value) {
-                            ChatModel.Message message = document.toObject(ChatModel.Message.class);
-                            if (message.msg !=null & message.timestamp == null) {continue;} // FieldValue.serverTimestamp is so late
+                            TreeMap<Date, ChatRoomModel> orderedRooms = new TreeMap<Date, ChatRoomModel>(Collections.reverseOrder());
 
-                            ChatRoomModel chatRoomModel = new ChatRoomModel();
-                            chatRoomModel.setRoomID(document.getId());
-                            //chatRoomModel.setUnreadCount(0);
+                            for (final QueryDocumentSnapshot document : value) {
+                                Message message = document.toObject(Message.class);
+                                if (message.getMsg() !=null & message.getTimestamp() == null) {continue;} // FieldValue.serverTimestamp is so late
 
-                            if (message.msg !=null) { // there are no last message
-                                chatRoomModel.setLastDatetime(simpleDateFormat.format(message.timestamp));
-                                switch(message.msgtype){
-                                    case "1": chatRoomModel.setLastMsg("Image"); break;
-                                    case "2": chatRoomModel.setLastMsg("File"); break;
-                                    default:  chatRoomModel.setLastMsg(message.msg);
+                                ChatRoomModel chatRoomModel = new ChatRoomModel();
+                                chatRoomModel.setRoomID(document.getId());
+
+                                if (message.getMsg() !=null) { // there are no last message
+                                    chatRoomModel.setLastDatetime(simpleDateFormat.format(message.getTimestamp()));
+                                    switch(message.getMsgtype()){
+                                        case "1": chatRoomModel.setLastMsg("Image"); break;
+                                        case "2": chatRoomModel.setLastMsg("File"); break;
+                                        default:  chatRoomModel.setLastMsg(message.getMsg());
+                                    }
                                 }
-                            }
-                            Map<String, Long> users = (Map<String, Long>) document.get("users");
-                            chatRoomModel.setUserCount(users.size());
-                            for( String key : users.keySet() ){
-                                if (myUid.equals(key)) {
-                                    Integer  unread = (int) (long) users.get(key);
-                                    unreadTotal += unread;
-                                    chatRoomModel.setUnreadCount(unread);
-                                    break;
-                                }
-                            }
-                            if (users.size()==2) {
+                                Map<String, Long> users = (Map<String, Long>) document.get("users");
+                                chatRoomModel.setUserCount(users.size());
                                 for( String key : users.keySet() ){
-                                    if (myUid.equals(key)) continue;
-                                    UserModel userModel = userList.get(key);
-                                    chatRoomModel.setTitle(userModel.getUsernm());
-                                    chatRoomModel.setPhoto(userModel.getUserphoto());
+                                    if (myUid.equals(key)) {
+                                        Integer  unread = (int) (long) users.get(key);
+                                        unreadTotal += unread;
+                                        chatRoomModel.setUnreadCount(unread);
+                                        break;
+                                    }
                                 }
-                            } else {                // group chat room
-                                chatRoomModel.setTitle(document.getString("title"));
+                                if (users.size()==2) {
+                                    for( String key : users.keySet() ){
+                                        if (myUid.equals(key)) continue;
+                                        UserModel userModel = userList.get(key);
+                                        chatRoomModel.setTitle(userModel.getUsernm());
+                                        chatRoomModel.setPhoto(userModel.getUserphoto());
+                                    }
+                                } else {                // group chat room
+                                    chatRoomModel.setTitle(document.getString("title"));
+                                }
+                                if (message.getTimestamp()==null) message.setTimestamp(new Date());
+                                orderedRooms.put(message.getTimestamp(), chatRoomModel);
                             }
-
-                            roomList.put(document.getId(), chatRoomModel);
-                            roomListInx.add(document.getId());
+                            roomList.clear();
+                            for(Map.Entry<Date,ChatRoomModel> entry : orderedRooms.entrySet()) {
+                                roomList.add(entry.getValue());
+                            }
+                            notifyDataSetChanged();
+                            setBadge(getContext(), unreadTotal);
                         }
-                        notifyDataSetChanged();
-                    }
-                });
+                    });
+        }
+
+        public void stopListening() {
+            if (listenerRegistration != null) {
+                listenerRegistration.remove();
+                listenerRegistration = null;
+            }
+            if (listenerUsers != null) {
+                listenerUsers.remove();
+                listenerUsers = null;
+            }
+
+            roomList.clear();
+            notifyDataSetChanged();
         }
 
         @NonNull
@@ -161,7 +195,7 @@ public class ChatRoomFragment extends Fragment{
         public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
             RoomViewHolder roomViewHolder = (RoomViewHolder) holder;
 
-            final ChatRoomModel chatRoomModel = roomList.get(roomListInx.get(position));
+            final ChatRoomModel chatRoomModel = roomList.get(position);
 
             roomViewHolder.room_title.setText(chatRoomModel.getTitle());
             roomViewHolder.last_msg.setText(chatRoomModel.getLastMsg());

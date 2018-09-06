@@ -7,9 +7,11 @@ import android.os.Handler;
 import android.view.WindowManager;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.FirebaseFirestoreSettings;
 
 public class SplashActivity extends Activity {
-    private final int SPLASH_DISPLAY_LENGTH = 200;
+    private final int SPLASH_DISPLAY_LENGTH = 100;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -18,6 +20,11 @@ public class SplashActivity extends Activity {
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN, WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
         //FirebaseAuth.getInstance().signOut();
+        FirebaseFirestore firestore = FirebaseFirestore.getInstance();
+        FirebaseFirestoreSettings settings = new FirebaseFirestoreSettings.Builder()
+                .setTimestampsInSnapshotsEnabled(true)
+                .build();
+        firestore.setFirestoreSettings(settings);
 
         new Handler().postDelayed(new Runnable(){
             @Override
