@@ -66,6 +66,7 @@ import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -98,6 +99,7 @@ public class ChatFragment extends Fragment{
     private EditText msg_input;
     private RecyclerView recyclerView;
     private RecyclerViewAdapter mAdapter;
+    private SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm");
     private SimpleDateFormat dateFormatDay = new SimpleDateFormat("yyyy-MM-dd");
     private SimpleDateFormat dateFormatHour = new SimpleDateFormat("aa hh:mm");
     private String roomID;
@@ -108,6 +110,7 @@ public class ChatFragment extends Fragment{
     private ListenerRegistration listenerRegistration;
     private FirebaseFirestore firestore=null;
     private StorageReference storageReference;
+    private LinearLayoutManager linearLayoutManager;
 
     private ProgressDialog progressDialog = null;
     private Integer userCount = 0;
@@ -130,7 +133,8 @@ public class ChatFragment extends Fragment{
         View view = inflater.inflate(R.layout.fragment_chat, container, false);
 
         recyclerView = view.findViewById(R.id.recyclerView);
-        recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        linearLayoutManager = new LinearLayoutManager(getContext());
+        recyclerView.setLayoutManager(linearLayoutManager);
 
         msg_input = view.findViewById(R.id.msg_input);
         sendBtn = view.findViewById(R.id.sendBtn);
@@ -176,6 +180,28 @@ public class ChatFragment extends Fragment{
             getUserInfoFromServer(toUid);
             userCount = 2;
         };
+
+        recyclerView.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View v,
+                                       int left, int top, int right, int bottom,
+                                       int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                if (mAdapter!=null & bottom < oldBottom) {
+                    final int lastAdapterItem = mAdapter.getItemCount() - 1;
+                    recyclerView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            int recyclerViewPositionOffset = -1000000;
+                            View bottomView = linearLayoutManager.findViewByPosition(lastAdapterItem);
+                            if (bottomView != null) {
+                                recyclerViewPositionOffset = 0 - bottomView.getHeight();
+                            }
+                            linearLayoutManager.scrollToPositionWithOffset(lastAdapterItem, recyclerViewPositionOffset);
+                        }
+                    });
+                }
+            }
+        });
 
         return view;
     }
@@ -616,10 +642,30 @@ public class ChatFragment extends Fragment{
                             .into(messageViewHolder.user_photo);
                 }
             }
-
             messageViewHolder.divider.setVisibility(View.INVISIBLE);
             messageViewHolder.divider.getLayoutParams().height = 0;
             messageViewHolder.timestamp.setText("");
+            if (message.getTimestamp()==null) {return;}
+
+            String day = dateFormatDay.format( message.getTimestamp());
+            String timestamp = dateFormatHour.format( message.getTimestamp());
+            messageViewHolder.timestamp.setText(timestamp);
+
+            if (position==0) {
+                messageViewHolder.divider_date.setText(day);
+                messageViewHolder.divider.setVisibility(View.VISIBLE);
+                messageViewHolder.divider.getLayoutParams().height = 60;
+            } else {
+                Message beforeMsg = messageList.get(position - 1);
+                String beforeDay = dateFormatDay.format( beforeMsg.getTimestamp() );
+
+                if (!day.equals(beforeDay) && beforeDay != null) {
+                    messageViewHolder.divider_date.setText(day);
+                    messageViewHolder.divider.setVisibility(View.VISIBLE);
+                    messageViewHolder.divider.getLayoutParams().height = 60;
+                }
+            }
+            /*messageViewHolder.timestamp.setText("");
             if (message.getTimestamp()==null) {return;}
 
             String day = dateFormatDay.format( message.getTimestamp());
@@ -638,7 +684,7 @@ public class ChatFragment extends Fragment{
                 beforeViewHolder.divider.getLayoutParams().height = 60;
             }
             beforeViewHolder = messageViewHolder;
-            beforeDay = day;
+            beforeDay = day;*/
         }
 
         void setReadCounter (Message message, final TextView textView) {
