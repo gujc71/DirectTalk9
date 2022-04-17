@@ -1,17 +1,16 @@
 package gujc.directtalk9.chat;
 
 import android.os.Bundle;
-import android.support.v4.widget.DrawerLayout;
-import android.support.v7.app.ActionBar;
-import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.Toolbar;
+import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.appcompat.app.ActionBar;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.Toolbar;
 import android.view.Gravity;
 import android.view.MenuItem;
 import android.view.View;
 import gujc.directtalk9.R;
 import gujc.directtalk9.fragment.ChatFragment;
 import gujc.directtalk9.fragment.UserListInRoomFragment;
-import gujc.directtalk9.model.ChatModel;
 
 public class ChatActivity extends AppCompatActivity {
     private DrawerLayout drawerLayout;
