@@ -22,7 +22,6 @@ import android.view.View;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.SetOptions;
-import com.google.firebase.iid.*;
 import com.google.firebase.messaging.FirebaseMessaging;
 
 import java.util.HashMap;
