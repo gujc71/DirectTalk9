@@ -1,6 +1,8 @@
 package gujc.directtalk9;
 
 import android.content.Intent;
+
+import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import androidx.appcompat.app.AppCompatActivity;
@@ -20,7 +22,8 @@ import android.view.View;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.SetOptions;
-import com.google.firebase.iid.FirebaseInstanceId;
+import com.google.firebase.iid.*;
+import com.google.firebase.messaging.FirebaseMessaging;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -103,10 +106,15 @@ public class MainActivity extends AppCompatActivity {
 
     void sendRegistrationToServer() {
         String uid = FirebaseAuth.getInstance().getCurrentUser().getUid();
-        String token = FirebaseInstanceId.getInstance().getToken();
-        Map<String, Object> map = new HashMap<>();
-        map.put("token", token);
-        FirebaseFirestore.getInstance().collection("users").document(uid).set(map, SetOptions.merge());
+        FirebaseMessaging.getInstance().getToken().addOnSuccessListener(new OnSuccessListener<String>() {
+            @Override
+            public void onSuccess(String s) {
+                Map<String, Object> map = new HashMap<>();
+                map.put("token", s);
+                FirebaseFirestore.getInstance().collection("users").document(uid).set(map, SetOptions.merge());
+            }
+        });
+
     }
 
     @Override
